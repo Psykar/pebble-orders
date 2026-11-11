@@ -78,7 +78,10 @@ export function buildReports(
   const parsed: Entry[] = []
   for (const comment of comments) {
     if (comment.parentId !== post.id) continue
-    if (!comment.authorName || !comment.body) continue
+    // Deleted accounts all share the name [deleted], which would merge their
+    // reports when deduping by author.
+    if (!comment.authorName || comment.authorName === '[deleted]') continue
+    if (!comment.body) continue
     if (comment.body === '[deleted]' || comment.body === '[removed]') continue
     const entry = normalizeEntry({
       author: comment.authorName,

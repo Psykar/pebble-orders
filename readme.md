@@ -20,8 +20,13 @@ Reports refresh every 15 minutes.
 
 - The app reads the public top-level comments on the configured thread. Nothing else on Reddit is read.
 - Each comment is parsed for model, batch, colour, destination, dates and status. Each Redditor's most advanced report per device is kept.
-- Parsed reports, including the commenter's username, comment text and a link to the comment, are cached in the app's Reddit-hosted storage and shown in the dashboard. Deleted and removed comments are dropped on the next refresh.
+- Parsed reports, including the commenter's username, comment text and a link to the comment, are cached in the app's Reddit-hosted storage and shown in the dashboard.
+- Deleted and removed comments, and comments from deleted accounts, drop out at the next refresh (within 15 minutes). The cache also expires after an hour if refreshes stop.
 - The app sends no data outside Reddit and stores nothing about the people viewing the dashboard.
+
+### Support
+
+Report problems or ideas as an issue at [github.com/Psykar/pebble-orders](https://github.com/Psykar/pebble-orders/issues).
 
 ### Credits
 

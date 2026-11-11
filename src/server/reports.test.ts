@@ -47,10 +47,11 @@ test('keeps the most advanced report per author', () => {
   )
 })
 
-test('skips replies, deleted comments and chatter', () => {
+test('skips replies, deleted comments, deleted accounts and chatter', () => {
   const reports = buildReports(post, [
     comment('bob', waiting, 1, 't1_parent'),
     comment('carol', '[deleted]', 2),
+    comment('[deleted]', delivered, 2),
     comment('dave', 'Any news from the UK?', 3),
     comment('erin', waiting, 4),
   ])
