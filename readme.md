@@ -13,7 +13,7 @@ Running on Reddit's Developer Platform means the app reads the thread through `r
 
 ## Credits
 
-The report parser (`src/shared/parser.js`) and the full dashboard (`public/dashboard.html`, `public/styles.css`, `src/client/dashboard.js`) come from [pebble-dash](https://github.com/myNameArnav/pebble-dash) by [myNameArnav](https://github.com/myNameArnav). The Devvit app scaffolding comes from Reddit's Devvit template and is covered by `LICENSE`. pebble-dash has no licence of its own, so the ported files are not covered by `LICENSE`.
+The report parser (`src/shared/parser.js`) and the full dashboard (`public/dashboard.html`, `public/styles.css`, `src/client/dashboard.js`) come from [pebble-dash](https://github.com/myNameArnav/pebble-dash) by [myNameArnav](https://github.com/myNameArnav). The Devvit app scaffolding comes from Reddit's Devvit template and is covered by `LICENSE`. pebble-dash has no licence of its own, so the ported files are not covered by the BSD-3-Clause terms; `LICENSE` lists them and explains the situation.
 
 ## Getting Started
 

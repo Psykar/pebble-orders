@@ -1,4 +1,25 @@
-# License (BSD-3-Clause)
+# License
+
+## Scope: files ported from pebble-dash are not covered
+
+These files are ported from [pebble-dash](https://github.com/myNameArnav/pebble-dash)
+by myNameArnav:
+
+- `src/shared/parser.js`
+- `public/dashboard.html`
+- `public/styles.css`
+- `src/client/dashboard.js`
+
+The pebble-dash repository has no licence, so by default its author keeps all
+rights to that code. Those files are **not** licensed under the BSD-3-Clause
+terms below, and anyone wanting to reuse them needs the original author's
+permission. Their licensing is unresolved; this file will be updated if the
+upstream author grants a licence.
+
+Everything else in this repository is licensed under the BSD-3-Clause terms
+below.
+
+## BSD-3-Clause
 
 Copyright (c) 2025 Reddit Inc.
 
