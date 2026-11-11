@@ -22,7 +22,7 @@
     "@biomejs/biome": "2.6.6",
     "@devvit/web": "0.15.3",
     "@types/node": "24.19.2",
-    "chart.js": "^4.4.0",
+    "chart.js": "^4.6.1",
     "devvit": "0.15.3",
     "esbuild": "0.28.2",
     "typescript": "7.0.2"
