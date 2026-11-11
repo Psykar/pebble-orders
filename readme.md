@@ -45,7 +45,7 @@ Source: [github.com/Psykar/pebble-orders](https://github.com/Psykar/pebble-order
 
 ### Licence
 
-The Devvit app scaffolding comes from Reddit's Devvit template and is covered by `LICENSE`. pebble-dash has no licence of its own, so the files ported from it (`src/shared/parser.js`, `public/dashboard.html`, `public/styles.css`, `src/client/dashboard.js`) are not covered by the BSD-3-Clause terms; `LICENSE` lists them and explains the situation.
+MIT, including the files ported from pebble-dash (MIT, Arnav Jain). Portions derived from Reddit's Devvit app template stay under BSD-3-Clause. `LICENSE` has both texts.
 
 ### Getting started
 
