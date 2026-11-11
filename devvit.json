@@ -2,13 +2,16 @@
   "$schema": "https://developers.reddit.com/schema/config-file.v1.json",
   "name": "pebble-orders",
   "permissions": {
-    "reddit": {"enable": true},
+    "reddit": {
+      "enable": true
+    },
     "redis": true
   },
   "post": {
     "entrypoints": {
       "default": {
-        "entry": "splash.html"
+        "entry": "splash.html",
+        "height": "tall"
       },
       "dashboard": {
         "entry": "dashboard.html"
@@ -47,5 +50,8 @@
   },
   "scripts": {
     "dev": "npm run watch"
+  },
+  "dev": {
+    "subreddit": "pebble_orders_dev"
   }
 }

@@ -6,50 +6,225 @@
     <title>Pebble Shipping Dashboard</title>
     <link rel="modulepreload" href="splash.js">
     <style>
-    body {
+    /* Inline posts are capped at ~512px tall, so everything here must fit
+       without scrolling: the feed owns vertical scroll gestures. */
+    :root {
+      --bg: #0a0a14;
+      --bg-elev: #12121f;
+      --card: #171728;
+      --text: #e8e8f0;
+      --text-dim: #b0b0c4;
+      --muted: #7878a0;
+      --border: #26263f;
+      --accent: #4ecdc4;
+      --orange: #ffa94d;
+      --green: #69db7c;
+      --blue: #74c0fc;
+    }
+    * {
+      box-sizing: border-box;
       margin: 0;
-      width: 100dvw;
+      padding: 0;
+    }
+    body {
       height: 100dvh;
       overflow: hidden;
       display: grid;
-      place-items: center;
-      background: #111125;
-      color: #e0e0f0;
+      grid-template-rows: auto auto auto minmax(0, 1fr);
+      gap: 0.9rem;
+      padding: 0.9rem 1rem;
+      background: var(--bg);
+      color: var(--text);
       font-family:
         -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      font-size: 14px;
+    }
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.75rem;
+    }
+    h1 {
+      font-size: 1.05rem;
+      line-height: 1.2;
+    }
+    #meta {
+      margin-top: 0.15rem;
+      color: var(--muted);
+      font-size: 0.8rem;
+    }
+    #open-btn {
+      flex: none;
+      border: 1px solid var(--accent);
+      border-radius: 999px;
+      padding: 0.45rem 0.9rem;
+      background: transparent;
+      color: var(--accent);
+      font: inherit;
+      font-size: 0.85rem;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    #open-btn:hover {
+      background: rgba(78, 205, 196, 0.15);
+    }
+    #devices {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.4rem;
+    }
+    .chip {
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      padding: 0.25rem 0.7rem;
+      background: var(--card);
+      color: var(--text-dim);
+      font: inherit;
+      font-size: 0.8rem;
+      cursor: pointer;
+    }
+    .chip span {
+      color: var(--muted);
+    }
+    .chip[aria-pressed='true'] {
+      border-color: var(--accent);
+      background: rgba(78, 205, 196, 0.15);
+      color: var(--text);
+    }
+    .bar {
+      height: 0.7rem;
+      display: flex;
+      overflow: hidden;
+      background: var(--bg-elev);
+      border: 1px solid var(--border);
+      border-radius: 999px;
+    }
+    .seg {
+      min-width: 0;
+      transition: width 0.4s ease;
+    }
+    .delivered {
+      background: var(--accent);
+    }
+    .shipped {
+      background: var(--green);
+    }
+    .confirmed {
+      background: var(--blue);
+    }
+    .waiting {
+      background: var(--orange);
+    }
+    .unknown {
+      background: var(--muted);
+    }
+    #legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.3rem 1rem;
+      margin-top: 0.55rem;
+      color: var(--text-dim);
+      font-size: 0.8rem;
+    }
+    #legend strong {
+      color: var(--text);
+    }
+    .dot {
+      display: inline-block;
+      width: 0.55rem;
+      height: 0.55rem;
+      margin-right: 0.35rem;
+      border-radius: 50%;
     }
     main {
       display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1.5fr);
       gap: 1rem;
-      justify-items: center;
-      text-align: center;
-      padding: 1rem;
+      min-height: 0;
     }
-    h1 {
-      margin: 0;
-      font-size: 1.4rem;
+    .panel {
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+      padding: 0.75rem 0.85rem;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
     }
-    #summary {
-      margin: 0;
-      color: #8888aa;
-    }
-    button {
-      border: 0;
-      border-radius: 999px;
-      padding: 0.7rem 1.4rem;
-      background: #4ecdc4;
-      color: #111125;
-      font: inherit;
+    .panel h2 {
+      margin-bottom: 0.6rem;
+      color: var(--muted);
+      font-size: 0.72rem;
       font-weight: 600;
-      cursor: pointer;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
+    #batches {
+      display: grid;
+      gap: 0.65rem;
+      align-content: start;
+    }
+    .batch-head {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 0.25rem;
+      font-size: 0.82rem;
+    }
+    .batch-head span {
+      color: var(--muted);
+    }
+    .batch .bar {
+      height: 0.5rem;
+    }
+    #timeline-panel[hidden] {
+      display: none;
+    }
+    .chart-wrap {
+      position: relative;
+      flex: 1;
+      min-height: 0;
+    }
+    #status {
+      color: var(--muted);
+      font-size: 0.85rem;
+    }
+    @media (max-width: 559px) {
+      main {
+        grid-template-columns: minmax(0, 1fr);
+      }
+      #timeline-panel {
+        display: none;
+      }
     }
     </style>
   </head>
   <body>
+    <header>
+      <div>
+        <h1>Pebble Shipping Dashboard</h1>
+        <p id="meta">Loading reports…</p>
+      </div>
+      <button id="open-btn" type="button">Full dashboard</button>
+    </header>
+    <nav id="devices" aria-label="Filter by device"></nav>
+    <section aria-label="Rollout progress">
+      <div class="bar" id="progress"></div>
+      <div id="legend"></div>
+    </section>
     <main>
-      <h1>Pebble Shipping Dashboard</h1>
-      <p id="summary">Loading reports…</p>
-      <button id="start-btn" type="button">Open dashboard</button>
+      <section class="panel" aria-labelledby="batches-title">
+        <h2 id="batches-title">Past confirmation by batch</h2>
+        <div id="batches"><p id="status">Loading…</p></div>
+      </section>
+      <section
+        class="panel"
+        id="timeline-panel"
+        aria-labelledby="timeline-title"
+      >
+        <h2 id="timeline-title">Cumulative progress</h2>
+        <div class="chart-wrap"><canvas id="timeline"></canvas></div>
+      </section>
     </main>
     <script src="splash.js" type="module"></script>
   </body>
