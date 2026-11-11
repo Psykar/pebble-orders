@@ -1,4 +1,4 @@
-import {requestExpandedMode} from '@devvit/web/client'
+import {navigateTo, requestExpandedMode} from '@devvit/web/client'
 import {
   CategoryScale,
   Chart,
@@ -53,6 +53,15 @@ function el(id: string): HTMLElement {
 el('open-btn').addEventListener('click', ev =>
   requestExpandedMode(ev, 'dashboard'),
 )
+
+// Web views can't open links themselves, so hand them to Reddit.
+document.addEventListener('click', ev => {
+  const link =
+    ev.target instanceof Element ? ev.target.closest('a[href]') : null
+  if (!(link instanceof HTMLAnchorElement)) return
+  ev.preventDefault()
+  navigateTo(link.href)
+})
 
 function countBy(entries: readonly Entry[]): Record<ReportStatus, number> {
   const counts = {
@@ -275,6 +284,8 @@ async function init(): Promise<void> {
     })
     if (!rsp.ok) throw Error(`HTTP status ${rsp.status}`)
     const data = (await rsp.json()) as ReportsRsp
+    const threadLink = el('thread-link')
+    if (threadLink instanceof HTMLAnchorElement) threadLink.href = data.source
     const hasDefault = data.entries.some(e => e.device === defaultDevice)
     render(data, hasDefault ? defaultDevice : allDevices)
   } catch (err) {

@@ -30,7 +30,7 @@
       height: 100dvh;
       overflow: hidden;
       display: grid;
-      grid-template-rows: auto auto auto minmax(0, 1fr);
+      grid-template-rows: auto auto auto minmax(0, 1fr) auto;
       gap: 0.9rem;
       padding: 0.9rem 1rem;
       background: var(--bg);
@@ -189,6 +189,13 @@
       color: var(--muted);
       font-size: 0.85rem;
     }
+    footer {
+      color: var(--muted);
+      font-size: 0.72rem;
+    }
+    footer a {
+      color: var(--text-dim);
+    }
     @media (max-width: 559px) {
       main {
         grid-template-columns: minmax(0, 1fr);
@@ -226,6 +233,16 @@
         <div class="chart-wrap"><canvas id="timeline"></canvas></div>
       </section>
     </main>
+    <footer>
+      Reports from the
+      <a
+        id="thread-link"
+        href="https://www.reddit.com/r/pebble/comments/1sjk3c7/shipping_mega_thread"
+        >r/pebble shipping mega thread</a
+      >
+      · based on
+      <a href="https://github.com/myNameArnav/pebble-dash">pebble-dash</a>
+    </footer>
     <script src="splash.js" type="module"></script>
   </body>
 </html>
