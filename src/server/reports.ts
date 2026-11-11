@@ -1,4 +1,4 @@
-import {reddit} from '@devvit/web/server'
+import {reddit, settings} from '@devvit/web/server'
 import type {T3} from '@devvit/web/shared'
 import type {ReportsRsp} from '../shared/api.ts'
 import {
@@ -8,9 +8,31 @@ import {
   type ReportStatus,
 } from '../shared/parser.js'
 
-export const threadId: T3 = 't3_1sjk3c7'
-export const threadUrl =
-  'https://www.reddit.com/r/pebble/comments/1sjk3c7/shipping_mega_thread'
+/** Must match the `settings.subreddit` key in devvit.json. */
+export const megaThreadSetting = 'megaThread'
+/** Used until a moderator sets megaThread; keep in step with devvit.json. */
+export const defaultThreadId: T3 = 't3_1sjk3c7'
+
+/**
+ * Parses a mega thread reference into a post ID. Accepts a post ID with or
+ * without the t3_ prefix, a reddit.com comments URL or a redd.it short link.
+ */
+export function parseThreadId(input: string): T3 | undefined {
+  const value = input.trim()
+  const id =
+    value.match(/^(?:t3_)?([a-z0-9]{3,12})$/i)?.[1] ??
+    value.match(
+      /^(?:https?:\/\/)?(?:[a-z]+\.)?reddit\.com\/(?:r\/[^/]+\/)?comments\/([a-z0-9]+)/i,
+    )?.[1] ??
+    value.match(/^(?:https?:\/\/)?redd\.it\/([a-z0-9]+)/i)?.[1]
+  return id ? `t3_${id.toLowerCase()}` : undefined
+}
+
+/** The configured mega thread, falling back to the default if unset or bad. */
+export async function getThreadId(): Promise<T3> {
+  const value = await settings.get<string>(megaThreadSetting)
+  return (value && parseThreadId(value)) || defaultThreadId
+}
 
 /** The subset of a Devvit Comment the parser needs. */
 export type ThreadComment = {
@@ -23,6 +45,8 @@ export type ThreadComment = {
 }
 
 export type ThreadPost = {
+  id: T3
+  permalink: string
   title: string
   createdAt: Date
   score: number
@@ -38,7 +62,7 @@ const statusRank: {[status in ReportStatus]: number} = {
 }
 
 /** Fetches every top-level comment on the mega thread and parses them. */
-export async function fetchReports(): Promise<ReportsRsp> {
+export async function fetchReports(threadId: T3): Promise<ReportsRsp> {
   const post = await reddit.getPostById(threadId)
   // getComments expands "load more" stubs itself, so this is the whole thread.
   const comments = await reddit
@@ -53,7 +77,7 @@ export function buildReports(
 ): ReportsRsp {
   const parsed: Entry[] = []
   for (const comment of comments) {
-    if (comment.parentId !== threadId) continue
+    if (comment.parentId !== post.id) continue
     if (!comment.authorName || !comment.body) continue
     if (comment.body === '[deleted]' || comment.body === '[removed]') continue
     const entry = normalizeEntry({
@@ -75,6 +99,7 @@ export function buildReports(
   }
 
   return {
+    threadId: post.id,
     post: {
       title: post.title,
       created: post.createdAt.toISOString(),
@@ -82,7 +107,7 @@ export function buildReports(
       numComments: post.numberOfComments,
     },
     entries: dedupeByAuthorAndDevice(parsed),
-    source: threadUrl,
+    source: absolutePermalink(post.permalink),
     generatedAt: new Date().toISOString(),
   }
 }

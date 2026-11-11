@@ -1268,6 +1268,8 @@ async function init() {
     post = live.post
     entries = enrichEntries(live.entries)
     dataGeneratedAt = live.generatedAt || null
+    const threadLink = document.getElementById('thread-link')
+    if (threadLink && live.source) threadLink.href = live.source
     dataSource = 'live'
     setLoadingStatus('')
     expandedRows.clear()

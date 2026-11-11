@@ -2,6 +2,8 @@ import type {IncomingMessage, ServerResponse} from 'node:http'
 import {reddit} from '@devvit/web/server'
 import type {
   PartialJsonValue,
+  SettingsValidationRequest,
+  SettingsValidationResponse,
   TriggerResponse,
   UiResponse,
 } from '@devvit/web/shared'
@@ -12,11 +14,16 @@ import {
   type ReportsRsp,
 } from '../shared/api.ts'
 import {dbGetReports, dbSetReports} from './db.ts'
-import {fetchReports} from './reports.ts'
+import {fetchReports, getThreadId, parseThreadId} from './reports.ts'
 
 const postTitle = 'Pebble Shipping Dashboard'
 
-type AnyRsp = ReportsRsp | UiResponse | TriggerResponse | ErrorRsp
+type AnyRsp =
+  | ReportsRsp
+  | UiResponse
+  | TriggerResponse
+  | SettingsValidationResponse
+  | ErrorRsp
 
 export async function onReq(
   reqMsg: IncomingMessage,
@@ -59,6 +66,9 @@ async function route(
         await refreshReports()
         rsp = {}
         break
+      case Endpoint.OnValidateMegaThread:
+        rsp = await routeValidateMegaThread(await readJson(reqMsg))
+        break
       default:
         endpoint satisfies never
         rsp = {error: 'not found', status: 404}
@@ -70,12 +80,15 @@ async function route(
 }
 
 async function routeGetReports(): Promise<ReportsRsp> {
-  // The scheduled task keeps this fresh; only the very first view fetches.
-  return (await dbGetReports()) ?? (await refreshReports())
+  // The scheduled task keeps this fresh; only the first view after install or
+  // after a moderator changes the mega thread setting fetches.
+  const threadId = await getThreadId()
+  const cached = await dbGetReports()
+  return cached?.threadId === threadId ? cached : await refreshReports(threadId)
 }
 
-async function refreshReports(): Promise<ReportsRsp> {
-  const reports = await fetchReports()
+async function refreshReports(threadId?: `t3_${string}`): Promise<ReportsRsp> {
+  const reports = await fetchReports(threadId ?? (await getThreadId()))
   await dbSetReports(reports)
   return reports
 }
@@ -90,6 +103,24 @@ async function routeMenuRefresh(): Promise<UiResponse> {
   }
 }
 
+async function routeValidateMegaThread(
+  req: SettingsValidationRequest<string>,
+): Promise<SettingsValidationResponse> {
+  if (!req.value?.trim()) return {success: true}
+  const threadId = parseThreadId(req.value)
+  if (!threadId)
+    return {
+      success: false,
+      error: 'Enter a Reddit post link (…/comments/abc123/…) or post ID.',
+    }
+  try {
+    await reddit.getPostById(threadId)
+  } catch {
+    return {success: false, error: `Couldn't find post ${threadId}.`}
+  }
+  return {success: true}
+}
+
 async function routeMenuNewPost(): Promise<UiResponse> {
   const post = await reddit.submitCustomPost({title: postTitle})
   return {
@@ -102,6 +133,12 @@ async function routeAppInstall(): Promise<TriggerResponse> {
   await refreshReports()
   await reddit.submitCustomPost({title: postTitle})
   return {}
+}
+
+async function readJson<T>(req: IncomingMessage): Promise<T> {
+  const chunks: Buffer[] = []
+  for await (const chunk of req) chunks.push(chunk as Buffer)
+  return JSON.parse(Buffer.concat(chunks).toString() || '{}') as T
 }
 
 function writeJson<T extends PartialJsonValue>(

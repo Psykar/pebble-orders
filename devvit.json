@@ -37,6 +37,18 @@
       }
     ]
   },
+  "settings": {
+    "subreddit": {
+      "megaThread": {
+        "type": "string",
+        "label": "Shipping mega thread",
+        "helpText": "Link or post ID of the thread whose top-level comments are shipping reports. Takes effect on the next dashboard view.",
+        "placeholder": "https://www.reddit.com/r/pebble/comments/1sjk3c7/",
+        "defaultValue": "https://www.reddit.com/r/pebble/comments/1sjk3c7/shipping_mega_thread",
+        "validationEndpoint": "/internal/settings/validate-mega-thread"
+      }
+    }
+  },
   "triggers": {
     "onAppInstall": "/internal/on/app/install"
   },

@@ -1,8 +1,15 @@
 import assert from 'node:assert/strict'
 import {test} from 'node:test'
-import {buildReports, type ThreadComment, threadId} from './reports.ts'
+import {
+  buildReports,
+  parseThreadId,
+  type ThreadComment,
+  defaultThreadId as threadId,
+} from './reports.ts'
 
 const post = {
+  id: threadId,
+  permalink: '/r/pebble/comments/1sjk3c7/shipping_mega_thread/',
   title: 'Shipping Mega Thread',
   createdAt: new Date('2026-04-12T17:03:49Z'),
   score: 1,
@@ -50,5 +57,37 @@ test('skips replies, deleted comments and chatter', () => {
   assert.deepEqual(
     reports.entries.map(entry => entry.author),
     ['erin'],
+  )
+})
+
+test('parseThreadId accepts IDs and links', () => {
+  for (const input of [
+    't3_1sjk3c7',
+    '1sjk3c7',
+    ' 1SJK3C7 ',
+    'https://www.reddit.com/r/pebble/comments/1sjk3c7/shipping_mega_thread/',
+    'https://old.reddit.com/r/pebble/comments/1sjk3c7/',
+    'reddit.com/comments/1sjk3c7',
+    'https://redd.it/1sjk3c7',
+  ])
+    assert.equal(parseThreadId(input), 't3_1sjk3c7', input)
+})
+
+test('parseThreadId rejects other input', () => {
+  for (const input of [
+    '',
+    'https://example.com/comments/1sjk3c7',
+    'https://www.reddit.com/r/pebble/',
+    'not a post',
+  ])
+    assert.equal(parseThreadId(input), undefined, input)
+})
+
+test('reports link to the thread they came from', () => {
+  const reports = buildReports(post, [comment('a', waiting, 1)])
+  assert.equal(reports.threadId, threadId)
+  assert.equal(
+    reports.source,
+    'https://www.reddit.com/r/pebble/comments/1sjk3c7/shipping_mega_thread/',
   )
 })

@@ -2,19 +2,28 @@ import assert from 'node:assert/strict'
 import {createServer} from 'node:http'
 import type {AddressInfo, Server} from 'node:net'
 import {after, before, beforeEach, test} from 'node:test'
-import {type Context, reddit, redis, runWithContext} from '@devvit/web/server'
+import {
+  type Context,
+  reddit,
+  redis,
+  runWithContext,
+  settings,
+} from '@devvit/web/server'
 import {Endpoint, type ErrorRsp, type ReportsRsp} from '../shared/api.ts'
-import {threadId} from './reports.ts'
+import {megaThreadSetting} from './reports.ts'
 import {onReq} from './server.ts'
 
 let server: Server
 let serverURL: string
 let commentFetches = 0
+let megaThread: string | undefined
+const missingPostId = 't3_missing'
 const redisValues = new Map<string, string>()
 const redisGet = redis.get.bind(redis)
 const redisSet = redis.set.bind(redis)
 const redditGetPostById = reddit.getPostById.bind(reddit)
 const redditGetComments = reddit.getComments.bind(reddit)
+const settingsGet = settings.get.bind(settings)
 
 const reportBody =
   'Model: Pebble Time 2\nOrdered: 2025-03-24\nBatch: 2\nDestination: Canada\nColor: Silver/Grey'
@@ -25,14 +34,22 @@ before(async () => {
     redisValues.set(key, value)
     return 'OK'
   }
-  reddit.getPostById = (async () => ({
-    title: 'Shipping Mega Thread',
-    createdAt: new Date('2026-04-12T17:03:49Z'),
-    score: 117,
-    numberOfComments: 2,
-  })) as unknown as typeof reddit.getPostById
-  reddit.getComments = (() => {
+  settings.get = (async (name: string) =>
+    name === megaThreadSetting ? megaThread : undefined) as typeof settings.get
+  reddit.getPostById = (async (id: string) => {
+    if (id === missingPostId) throw Error('not found')
+    return {
+      id,
+      permalink: `/r/pebble/comments/${id.slice(3)}/thread/`,
+      title: 'Shipping Mega Thread',
+      createdAt: new Date('2026-04-12T17:03:49Z'),
+      score: 117,
+      numberOfComments: 2,
+    }
+  }) as unknown as typeof reddit.getPostById
+  reddit.getComments = (({postId}: {postId: string}) => {
     commentFetches++
+    const threadId = postId
     return {
       all: async () => [
         {
@@ -78,6 +95,7 @@ after(async () => {
   redis.set = redisSet
   reddit.getPostById = redditGetPostById
   reddit.getComments = redditGetComments
+  settings.get = settingsGet
   if (!server.listening) return
   await new Promise<void>((resolve, reject) => {
     server.close(err => (err ? reject(err) : resolve()))
@@ -87,6 +105,7 @@ after(async () => {
 beforeEach(() => {
   redisValues.clear()
   commentFetches = 0
+  megaThread = undefined
 })
 
 test('get reports fetches once then serves the cache', async () => {
@@ -107,6 +126,40 @@ test('get reports fetches once then serves the cache', async () => {
 
   await fetch(`${serverURL}/${Endpoint.GetReports}`)
   assert.equal(commentFetches, 1)
+})
+
+test('changing the mega thread setting refetches', async () => {
+  await fetch(`${serverURL}/${Endpoint.GetReports}`)
+  megaThread = 'https://www.reddit.com/r/pebble/comments/abc999/new_thread/'
+  const rsp = await fetch(`${serverURL}/${Endpoint.GetReports}`)
+  const reports = (await rsp.json()) as ReportsRsp
+  assert.equal(reports.threadId, 't3_abc999')
+  assert.equal(
+    reports.source,
+    'https://www.reddit.com/r/pebble/comments/abc999/thread/',
+  )
+  assert.equal(commentFetches, 2)
+})
+
+async function validate(value: string | undefined): Promise<unknown> {
+  const rsp = await fetch(`${serverURL}/${Endpoint.OnValidateMegaThread}`, {
+    method: 'POST',
+    body: JSON.stringify({value, isEditing: true}),
+  })
+  return rsp.json()
+}
+
+test('mega thread setting validation', async () => {
+  assert.deepEqual(await validate('https://redd.it/abc999'), {success: true})
+  assert.deepEqual(await validate(undefined), {success: true})
+  assert.equal(
+    ((await validate('https://example.com/')) as {success: boolean}).success,
+    false,
+  )
+  assert.equal(
+    ((await validate('missing')) as {success: boolean}).success,
+    false,
+  )
 })
 
 test('refresh task updates the cache', async () => {

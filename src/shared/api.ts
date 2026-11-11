@@ -5,6 +5,8 @@ export type ErrorRsp = {error: string; status: number}
 
 /** Parsed shipping reports from the mega thread. */
 export type ReportsRsp = {
+  /** The mega thread these reports came from. */
+  threadId: `t3_${string}`
   post: {title: string; created: string; score: number; numComments: number}
   entries: Entry[]
   source: string
@@ -18,6 +20,7 @@ export const Endpoint = {
   OnMenuNewPost: 'internal/on/menu/new-post',
   OnMenuRefresh: 'internal/on/menu/refresh',
   OnRefreshTask: 'internal/scheduler/refresh-reports',
+  OnValidateMegaThread: 'internal/settings/validate-mega-thread',
 } as const
 
 export const EndpointMethod = {
@@ -26,4 +29,5 @@ export const EndpointMethod = {
   [Endpoint.OnMenuNewPost]: 'POST',
   [Endpoint.OnMenuRefresh]: 'POST',
   [Endpoint.OnRefreshTask]: 'POST',
+  [Endpoint.OnValidateMegaThread]: 'POST',
 } as const satisfies {[endpoint: string]: 'GET' | 'POST'}
