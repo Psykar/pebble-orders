@@ -1,0 +1,1289 @@
+function toTitleCase(value) {
+  return value.toLowerCase().replace(/\b\w/g, c => c.toUpperCase())
+}
+
+function cleanBodyText(body) {
+  return String(body || '')
+    .replace(/[\\•\u2060*_~`>#()[\]]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+function cleanLines(body) {
+  return String(body || '')
+    .split('\n')
+    .map(line =>
+      line
+        .replace(/[\\•\u2060*_~`>#()[\]]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim(),
+    )
+    .filter(Boolean)
+}
+
+function isTipsPost(body) {
+  return /^\s*(?:[*_~`>#\-\s]+)?tips(?:\s*[*_~`]+)?\s*:?\b/i.test(
+    String(body || ''),
+  )
+}
+
+function normalizeCountry(value) {
+  const v = String(value || '')
+    .replace(/[(),]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase()
+  const aliases = {
+    us: 'US',
+    usa: 'US',
+    'united states': 'US',
+    'united states usa': 'US',
+    'united states of america': 'US',
+    uk: 'UK',
+    gb: 'UK',
+    gbr: 'UK',
+    'united kingdom': 'UK',
+    england: 'UK',
+    'great britain': 'UK',
+    scotland: 'UK',
+    wales: 'UK',
+    'northern ireland': 'UK',
+    au: 'Australia',
+    aus: 'Australia',
+    de: 'Germany',
+    deu: 'Germany',
+    cl: 'Chile',
+    chl: 'Chile',
+    fr: 'France',
+    fra: 'France',
+    hu: 'Hungary',
+    hun: 'Hungary',
+    'hungary hu': 'Hungary',
+    nl: 'Netherlands',
+    nld: 'Netherlands',
+    'the netherlands': 'Netherlands',
+    nz: 'New Zealand',
+    uae: 'UAE',
+    'united arab emirates': 'UAE',
+    dprk: 'North Korea',
+    drc: 'DR Congo',
+    'democratic republic of the congo': 'DR Congo',
+    holland: 'Netherlands',
+    czechia: 'Czech Republic',
+    burma: 'Myanmar',
+    swaziland: 'Eswatini',
+    'cape verde': 'Cabo Verde',
+    'east timor': 'Timor-Leste',
+    vatican: 'Vatican City',
+    'holy see': 'Vatican City',
+    "côte d'ivoire": 'Ivory Coast',
+    macedonia: 'North Macedonia',
+    antigua: 'Antigua and Barbuda',
+    'antigua & barbuda': 'Antigua and Barbuda',
+    bosnia: 'Bosnia and Herzegovina',
+    'st kitts': 'Saint Kitts and Nevis',
+    'st kitts and nevis': 'Saint Kitts and Nevis',
+    'saint kitts': 'Saint Kitts and Nevis',
+    'st lucia': 'Saint Lucia',
+    'st vincent': 'Saint Vincent and the Grenadines',
+    'st vincent and the grenadines': 'Saint Vincent and the Grenadines',
+    trinidad: 'Trinidad and Tobago',
+    'trinidad & tobago': 'Trinidad and Tobago',
+    'sao tome': 'Sao Tome and Principe',
+    papua: 'Papua New Guinea',
+    'the gambia': 'Gambia',
+    hk: 'Hong Kong',
+    'hong kong': 'Hong Kong',
+  }
+  if (/\b(?:us|usa|united states)\b/i.test(v)) return 'US'
+  return aliases[v] || toTitleCase(v)
+}
+
+function inferCountry(entry, lines, text) {
+  if (entry.country && entry.country !== 'Unknown') return entry.country
+
+  const countryPatterns = [
+    /\b(?:location|region|country|destination|delivery to|shipping to|ship to)\s*[:-]?\s*([A-Za-z][A-Za-z .,()-]{1,60})\b/i,
+  ]
+  const countryNames = [
+    'Afghanistan',
+    'Albania',
+    'Algeria',
+    'Andorra',
+    'Angola',
+    'Antigua and Barbuda',
+    'Argentina',
+    'Armenia',
+    'Australia',
+    'Austria',
+    'Azerbaijan',
+    'Bahamas',
+    'Bahrain',
+    'Bangladesh',
+    'Barbados',
+    'Belarus',
+    'Belgium',
+    'Belize',
+    'Benin',
+    'Bhutan',
+    'Bolivia',
+    'Bosnia and Herzegovina',
+    'Botswana',
+    'Brazil',
+    'Brunei',
+    'Bulgaria',
+    'Burkina Faso',
+    'Burundi',
+    'Cabo Verde',
+    'Cambodia',
+    'Cameroon',
+    'Canada',
+    'Central African Republic',
+    'Chad',
+    'Chile',
+    'China',
+    'Colombia',
+    'Comoros',
+    'Congo',
+    'Costa Rica',
+    'Croatia',
+    'Cuba',
+    'Cyprus',
+    'Czech Republic',
+    'DR Congo',
+    'Denmark',
+    'Djibouti',
+    'Dominica',
+    'Dominican Republic',
+    'Ecuador',
+    'Egypt',
+    'El Salvador',
+    'Equatorial Guinea',
+    'Eritrea',
+    'Estonia',
+    'Eswatini',
+    'Ethiopia',
+    'Fiji',
+    'Finland',
+    'France',
+    'Gabon',
+    'Gambia',
+    'Georgia',
+    'Germany',
+    'Ghana',
+    'Greece',
+    'Grenada',
+    'Guatemala',
+    'Guinea',
+    'Guinea-Bissau',
+    'Guyana',
+    'Haiti',
+    'Honduras',
+    'Hungary',
+    'Iceland',
+    'India',
+    'Indonesia',
+    'Iran',
+    'Iraq',
+    'Ireland',
+    'Israel',
+    'Italy',
+    'Ivory Coast',
+    'Jamaica',
+    'Japan',
+    'Jordan',
+    'Kazakhstan',
+    'Kenya',
+    'Kiribati',
+    'Kosovo',
+    'Kuwait',
+    'Kyrgyzstan',
+    'Laos',
+    'Latvia',
+    'Lebanon',
+    'Lesotho',
+    'Liberia',
+    'Libya',
+    'Liechtenstein',
+    'Lithuania',
+    'Luxembourg',
+    'Madagascar',
+    'Malawi',
+    'Malaysia',
+    'Maldives',
+    'Mali',
+    'Malta',
+    'Marshall Islands',
+    'Mauritania',
+    'Mauritius',
+    'Mexico',
+    'Micronesia',
+    'Moldova',
+    'Monaco',
+    'Mongolia',
+    'Montenegro',
+    'Morocco',
+    'Mozambique',
+    'Myanmar',
+    'Namibia',
+    'Nauru',
+    'Nepal',
+    'Netherlands',
+    'New Zealand',
+    'Nicaragua',
+    'Niger',
+    'Nigeria',
+    'North Korea',
+    'North Macedonia',
+    'Norway',
+    'Oman',
+    'Pakistan',
+    'Palau',
+    'Palestine',
+    'Panama',
+    'Papua New Guinea',
+    'Paraguay',
+    'Peru',
+    'Philippines',
+    'Poland',
+    'Portugal',
+    'Qatar',
+    'Romania',
+    'Russia',
+    'Rwanda',
+    'Saint Kitts and Nevis',
+    'Saint Lucia',
+    'Saint Vincent and the Grenadines',
+    'Samoa',
+    'San Marino',
+    'Sao Tome and Principe',
+    'Saudi Arabia',
+    'Senegal',
+    'Serbia',
+    'Seychelles',
+    'Sierra Leone',
+    'Singapore',
+    'Slovakia',
+    'Slovenia',
+    'Solomon Islands',
+    'Somalia',
+    'South Africa',
+    'South Korea',
+    'South Sudan',
+    'Spain',
+    'Sri Lanka',
+    'Sudan',
+    'Suriname',
+    'Sweden',
+    'Switzerland',
+    'Syria',
+    'Taiwan',
+    'Tajikistan',
+    'Tanzania',
+    'Thailand',
+    'Timor-Leste',
+    'Togo',
+    'Tonga',
+    'Trinidad and Tobago',
+    'Tunisia',
+    'Turkey',
+    'Turkmenistan',
+    'Tuvalu',
+    'UAE',
+    'UK',
+    'US',
+    'Uganda',
+    'Ukraine',
+    'Uruguay',
+    'Uzbekistan',
+    'Vanuatu',
+    'Vatican City',
+    'Venezuela',
+    'Vietnam',
+    'Yemen',
+    'Zambia',
+    'Zimbabwe',
+    'Hong Kong',
+    'Macao',
+  ]
+
+  for (const line of lines) {
+    for (const pattern of countryPatterns) {
+      const match = line.match(pattern)
+      if (!match) continue
+      const value = match[1].trim().replace(/[.,]+$/, '')
+      const normalized = normalizeCountry(value)
+      if (
+        (normalized !== value || ['US', 'UK', 'UAE'].includes(normalized)) &&
+        countryNames.some(name => new RegExp(`^${name}$`, 'i').test(normalized))
+      ) {
+        return normalized
+      }
+      if (countryNames.some(name => new RegExp(`^${name}$`, 'i').test(value))) {
+        return normalized
+      }
+    }
+    const normalizedLine = normalizeCountry(line)
+    if (
+      /^(?:us|usa|uk|gb|gbr|uae|au|aus|de|deu|cl|chl|fr|fra|hu|hun|nl|nld)$/i.test(
+        line,
+      )
+    ) {
+      return normalizedLine
+    }
+    if (countryNames.some(name => new RegExp(`^${name}$`, 'i').test(line))) {
+      return normalizedLine
+    }
+  }
+
+  for (const name of countryNames) {
+    if (new RegExp(`\\b${name.replace(/ /g, '\\s+')}\\b`, 'i').test(text)) {
+      return normalizeCountry(name)
+    }
+  }
+  return entry.country || 'Unknown'
+}
+
+function inferDevice(entry, text) {
+  if (
+    /\b(?:switched|changed|selected)(?:\s+my)?\s+(?:to\s+)?(?:pebble\s+time\s+2|pt2|time\s+2)\b/i.test(
+      text,
+    )
+  )
+    return 'Pebble Time 2'
+  if (/\b(?:pebble\s+time\s+2|pt2|time\s+2)\b/i.test(text))
+    return 'Pebble Time 2'
+  if (/\b(?:pebble\s+round|round\s*2|pr2)\b/i.test(text)) return 'Pebble Round'
+  if (/\b(?:pebble\s+index|index\s*0?1|\bindex\b)\b/i.test(text))
+    return 'Pebble Index'
+  if (
+    /\b(?:switched|changed|selected)(?:\s+my)?\s+(?:to\s+)?(?:pebble\s+duo\s*2|pebble\s+time\s+duo\s*2|p2d|duo\s*2)\b/i.test(
+      text,
+    )
+  )
+    return 'Pebble Duo 2'
+  if (
+    /\b(?:pebble\s+duo\s*2|pebble\s+time\s+duo\s*2|p2d|duo\s*2)\b/i.test(text)
+  )
+    return 'Pebble Duo 2'
+  if (entry.device && entry.device !== 'Unknown') {
+    if (/time\s+2/i.test(entry.device)) return 'Pebble Time 2'
+    if (/duo/i.test(entry.device)) return 'Pebble Duo 2'
+    if (/round/i.test(entry.device)) return 'Pebble Round'
+    if (/index/i.test(entry.device)) return 'Pebble Index'
+  }
+  return 'Unknown'
+}
+
+function inferContinent(country) {
+  if (!country || country === 'Unknown') return 'Unknown'
+  const map = {
+    US: 'North America',
+    Canada: 'North America',
+    Mexico: 'North America',
+    Guatemala: 'North America',
+    Belize: 'North America',
+    Honduras: 'North America',
+    'El Salvador': 'North America',
+    Nicaragua: 'North America',
+    'Costa Rica': 'North America',
+    Panama: 'North America',
+    Cuba: 'North America',
+    Jamaica: 'North America',
+    Haiti: 'North America',
+    'Dominican Republic': 'North America',
+    Bahamas: 'North America',
+    'Antigua and Barbuda': 'North America',
+    Barbados: 'North America',
+    Dominica: 'North America',
+    Grenada: 'North America',
+    'Saint Kitts and Nevis': 'North America',
+    'Saint Lucia': 'North America',
+    'Saint Vincent and the Grenadines': 'North America',
+    'Trinidad and Tobago': 'North America',
+    Brazil: 'South America',
+    Argentina: 'South America',
+    Chile: 'South America',
+    Colombia: 'South America',
+    Peru: 'South America',
+    Venezuela: 'South America',
+    Ecuador: 'South America',
+    Bolivia: 'South America',
+    Paraguay: 'South America',
+    Uruguay: 'South America',
+    Guyana: 'South America',
+    Suriname: 'South America',
+    UK: 'Europe',
+    Germany: 'Europe',
+    France: 'Europe',
+    Italy: 'Europe',
+    Spain: 'Europe',
+    Netherlands: 'Europe',
+    Belgium: 'Europe',
+    Switzerland: 'Europe',
+    Sweden: 'Europe',
+    Norway: 'Europe',
+    Denmark: 'Europe',
+    Finland: 'Europe',
+    Iceland: 'Europe',
+    Ireland: 'Europe',
+    Portugal: 'Europe',
+    Austria: 'Europe',
+    Poland: 'Europe',
+    'Czech Republic': 'Europe',
+    Slovakia: 'Europe',
+    Hungary: 'Europe',
+    Romania: 'Europe',
+    Bulgaria: 'Europe',
+    Croatia: 'Europe',
+    Slovenia: 'Europe',
+    Serbia: 'Europe',
+    Montenegro: 'Europe',
+    'Bosnia and Herzegovina': 'Europe',
+    Albania: 'Europe',
+    'North Macedonia': 'Europe',
+    Kosovo: 'Europe',
+    Greece: 'Europe',
+    Cyprus: 'Europe',
+    Malta: 'Europe',
+    Estonia: 'Europe',
+    Latvia: 'Europe',
+    Lithuania: 'Europe',
+    Ukraine: 'Europe',
+    Belarus: 'Europe',
+    Moldova: 'Europe',
+    Russia: 'Europe',
+    Luxembourg: 'Europe',
+    Monaco: 'Europe',
+    'San Marino': 'Europe',
+    Andorra: 'Europe',
+    Liechtenstein: 'Europe',
+    'Vatican City': 'Europe',
+    China: 'Asia',
+    Japan: 'Asia',
+    'South Korea': 'Asia',
+    'North Korea': 'Asia',
+    India: 'Asia',
+    Pakistan: 'Asia',
+    Bangladesh: 'Asia',
+    'Sri Lanka': 'Asia',
+    Nepal: 'Asia',
+    Bhutan: 'Asia',
+    Maldives: 'Asia',
+    Afghanistan: 'Asia',
+    Iran: 'Asia',
+    Iraq: 'Asia',
+    Syria: 'Asia',
+    Jordan: 'Asia',
+    Lebanon: 'Asia',
+    Israel: 'Asia',
+    Palestine: 'Asia',
+    'Saudi Arabia': 'Asia',
+    Yemen: 'Asia',
+    Oman: 'Asia',
+    UAE: 'Asia',
+    Qatar: 'Asia',
+    Kuwait: 'Asia',
+    Bahrain: 'Asia',
+    Turkey: 'Asia',
+    Armenia: 'Asia',
+    Azerbaijan: 'Asia',
+    Georgia: 'Asia',
+    Kazakhstan: 'Asia',
+    Uzbekistan: 'Asia',
+    Turkmenistan: 'Asia',
+    Kyrgyzstan: 'Asia',
+    Tajikistan: 'Asia',
+    Mongolia: 'Asia',
+    Myanmar: 'Asia',
+    Thailand: 'Asia',
+    Vietnam: 'Asia',
+    Laos: 'Asia',
+    Cambodia: 'Asia',
+    Malaysia: 'Asia',
+    Singapore: 'Asia',
+    Indonesia: 'Asia',
+    Philippines: 'Asia',
+    'Timor-Leste': 'Asia',
+    Brunei: 'Asia',
+    Taiwan: 'Asia',
+    Australia: 'Oceania',
+    'New Zealand': 'Oceania',
+    Fiji: 'Oceania',
+    'Papua New Guinea': 'Oceania',
+    'Solomon Islands': 'Oceania',
+    Vanuatu: 'Oceania',
+    Samoa: 'Oceania',
+    Tonga: 'Oceania',
+    Kiribati: 'Oceania',
+    Tuvalu: 'Oceania',
+    Nauru: 'Oceania',
+    'Marshall Islands': 'Oceania',
+    Palau: 'Oceania',
+    Micronesia: 'Oceania',
+    Egypt: 'Africa',
+    Nigeria: 'Africa',
+    'South Africa': 'Africa',
+    Kenya: 'Africa',
+    Ethiopia: 'Africa',
+    Tanzania: 'Africa',
+    Uganda: 'Africa',
+    Ghana: 'Africa',
+    Morocco: 'Africa',
+    Algeria: 'Africa',
+    Tunisia: 'Africa',
+    Libya: 'Africa',
+    Senegal: 'Africa',
+    Mali: 'Africa',
+    Niger: 'Africa',
+    Chad: 'Africa',
+    Cameroon: 'Africa',
+    'DR Congo': 'Africa',
+    Congo: 'Africa',
+    Gabon: 'Africa',
+    Angola: 'Africa',
+    Mozambique: 'Africa',
+    Zimbabwe: 'Africa',
+    Zambia: 'Africa',
+    Malawi: 'Africa',
+    Madagascar: 'Africa',
+    Botswana: 'Africa',
+    Namibia: 'Africa',
+    'South Sudan': 'Africa',
+    Sudan: 'Africa',
+    Somalia: 'Africa',
+    Eritrea: 'Africa',
+    Djibouti: 'Africa',
+    Rwanda: 'Africa',
+    Burundi: 'Africa',
+    'Burkina Faso': 'Africa',
+    Guinea: 'Africa',
+    'Guinea-Bissau': 'Africa',
+    'Ivory Coast': 'Africa',
+    'Sierra Leone': 'Africa',
+    Liberia: 'Africa',
+    'Equatorial Guinea': 'Africa',
+    Gambia: 'Africa',
+    Benin: 'Africa',
+    Togo: 'Africa',
+    'Cabo Verde': 'Africa',
+    'Sao Tome and Principe': 'Africa',
+    Eswatini: 'Africa',
+    Lesotho: 'Africa',
+    Mauritius: 'Africa',
+    Seychelles: 'Africa',
+    'Central African Republic': 'Africa',
+    Comoros: 'Africa',
+    Mauritania: 'Africa',
+    'Hong Kong': 'Asia',
+    Macao: 'Asia',
+  }
+  return map[country] || 'Unknown'
+}
+
+function inferColor(entry, text) {
+  const source = `${entry.color && entry.color !== 'Unknown' ? entry.color + ' ' : ''}${text}`
+  const patterns = [
+    [
+      /black\s*[/-]?\s*(?:grey|gray)|(?:grey|gray)\s*[/-]?\s*black|black\s*[/-]?\s*black|\bblack\b(?!\s*(?:\/|-)?\s*(?:red|blue))/i,
+      'Black/Grey',
+    ],
+    [
+      /silver\s*[/-]?\s*(?:grey|gray)|(?:grey|gray)\s*[/-]?\s*silver|gray\s+silver|\bwhite\b|\bsilver\b(?!\s*(?:\/|-)?\s*blue)/i,
+      'Silver/Grey',
+    ],
+    [/black\s*[/-]?\s*red|red\s*[/-]?\s*black/i, 'Black/Red'],
+    [/silver\s*[/-]?\s*blue|blue\s*[/-]?\s*silver/i, 'Silver/Blue'],
+  ]
+  for (const [pattern, value] of patterns) {
+    if (pattern.test(source)) return value
+  }
+  return entry.color || 'Unknown'
+}
+
+function inferBatch(entry, text) {
+  if (entry.batch && entry.batch !== 'Unknown') return entry.batch
+  const match = text.match(/\bbatch\s*[:#-]?\s*([1-5])\b/i)
+  return match ? `Batch ${match[1]}` : entry.batch || 'Unknown'
+}
+
+function parseMoneyAmount(value) {
+  const raw = String(value || '').trim()
+  if (!raw) return null
+  let normalized = raw.replace(/\s/g, '')
+  if (/^\d{1,3}(?:,\d{3})+(?:\.\d+)?$/.test(normalized)) {
+    normalized = normalized.replace(/,/g, '')
+  } else if (/^\d+,\d{1,2}$/.test(normalized)) {
+    normalized = normalized.replace(',', '.')
+  } else {
+    normalized = normalized.replace(/,/g, '')
+  }
+  const amount = Number(normalized)
+  return Number.isFinite(amount) ? amount : null
+}
+
+function formatTaxDisplay(amount, currency) {
+  if (!Number.isFinite(amount)) return null
+  const formatted = `$${amount.toLocaleString('en-US', {minimumFractionDigits: amount % 1 ? 2 : 0, maximumFractionDigits: 2})}`
+  return currency && currency !== 'USD' ? `${formatted} ${currency}` : formatted
+}
+
+function extractTax(entry, lines, text) {
+  if (Number.isFinite(entry.taxAmount)) {
+    return {
+      taxAmount: entry.taxAmount,
+      taxCurrency: entry.taxCurrency || 'USD',
+      taxDisplay:
+        entry.taxDisplay ||
+        formatTaxDisplay(entry.taxAmount, entry.taxCurrency || 'USD'),
+    }
+  }
+
+  const taxSignal =
+    /\b(?:tax|taxes|duty|duties|tariff|tariffs|tarrif|tarrifs|customs|vat|import\s+fees?|additional\s+charges?)\b/i
+  const amountPattern =
+    /(?:\$\s*([0-9][0-9.,]*)|(?:USD|CAD)\s*([0-9][0-9.,]*)|([0-9][0-9.,]*)\s*(USD|CAD)\b)/gi
+  const candidates = lines.filter(line => taxSignal.test(line))
+  if (candidates.length === 0 && taxSignal.test(text)) candidates.push(text)
+
+  for (const line of candidates) {
+    for (const match of line.matchAll(amountPattern)) {
+      const before = line.slice(Math.max(0, match.index - 12), match.index)
+      if (/\btotal\s*[:(]?\s*$/i.test(before)) continue
+
+      const amount = parseMoneyAmount(match[1] || match[2] || match[3])
+      if (!Number.isFinite(amount)) continue
+
+      const explicitCurrency =
+        match[4] ||
+        (/\bCAD\b/i.test(line) ? 'CAD' : /\bUSD\b/i.test(line) ? 'USD' : 'USD')
+      return {
+        taxAmount: amount,
+        taxCurrency: explicitCurrency.toUpperCase(),
+        taxDisplay: formatTaxDisplay(amount, explicitCurrency.toUpperCase()),
+      }
+    }
+  }
+
+  return {taxAmount: null, taxCurrency: null, taxDisplay: null}
+}
+
+function dateKeyFromDate(date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+}
+
+function utcKeyFromDate(date) {
+  return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}-${String(date.getUTCDate()).padStart(2, '0')} ${String(date.getUTCHours()).padStart(2, '0')}:${String(date.getUTCMinutes()).padStart(2, '0')}`
+}
+
+const TZ_OFFSETS_MINUTES = {
+  UTC: 0,
+  GMT: 0,
+  CET: 60,
+  CEST: 120,
+  EET: 120,
+  EEST: 180,
+  IST: 330,
+  BST: 60,
+  WET: 0,
+  WEST: 60,
+  EST: -300,
+  EDT: -240,
+  ET: -300,
+  CST: -360,
+  CDT: -300,
+  CT: -360,
+  MST: -420,
+  MDT: -360,
+  MT: -420,
+  PST: -480,
+  PDT: -420,
+  PT: -480,
+  AKST: -540,
+  AKDT: -480,
+  HST: -600,
+  AST: -240,
+  ADT: -180,
+  AT: -240,
+  AEST: 600,
+  AEDT: 660,
+  ACST: 570,
+  ACDT: 630,
+  AWST: 480,
+  NZST: 720,
+  NZDT: 780,
+  JST: 540,
+  KST: 540,
+  SGT: 480,
+  HKT: 480,
+  MSK: 180,
+  BRT: -180,
+  BRST: -120,
+  ART: -180,
+  CLT: -240,
+  CLST: -180,
+}
+
+function parseTimeFromText(fullText) {
+  const timeMatch = fullText.match(
+    /\b(\d{1,2}):(\d{2})(?::(\d{2}))?\s*(am|pm)?\b/i,
+  )
+  if (!timeMatch) return null
+
+  let hours = parseInt(timeMatch[1], 10)
+  const minutes = parseInt(timeMatch[2], 10)
+  const seconds = timeMatch[3] ? parseInt(timeMatch[3], 10) : 0
+  const isPM = timeMatch[4] && timeMatch[4].toLowerCase() === 'pm'
+
+  if (isPM && hours < 12) hours += 12
+  if (!isPM && hours === 12) hours = 0
+
+  return {hours, minutes, seconds}
+}
+
+function parseTZOffsetMinutes(fullText) {
+  const gmtMatch = fullText.match(/\bGMT\s*([+-])\s*(\d{1,2})(?::?(\d{2}))?\b/i)
+  const utcOffsetMatch = fullText.match(
+    /\bUTC\s*([+-])\s*(\d{1,2})(?::?(\d{2}))?\b/i,
+  )
+  const offsetMatch = gmtMatch || utcOffsetMatch
+  if (offsetMatch) {
+    const sign = offsetMatch[1] === '-' ? -1 : 1
+    const hours = parseInt(offsetMatch[2], 10)
+    const mins = offsetMatch[3] ? parseInt(offsetMatch[3], 10) : 0
+    return sign * (hours * 60 + mins)
+  }
+
+  const abbrPattern = new RegExp(
+    '\\b(' +
+      Object.keys(TZ_OFFSETS_MINUTES)
+        .sort((a, b) => b.length - a.length)
+        .join('|') +
+      ')\\b',
+    'i',
+  )
+  const abbrMatch = fullText.match(abbrPattern)
+  if (abbrMatch) {
+    const tz = abbrMatch[1].toUpperCase()
+    if (tz in TZ_OFFSETS_MINUTES) return TZ_OFFSETS_MINUTES[tz]
+  }
+
+  return null
+}
+
+function buildUTCDateTimeDisplay(dateKey, fullText) {
+  const timeInfo = parseTimeFromText(fullText)
+  if (!timeInfo) return null
+
+  const tzOffsetMin = parseTZOffsetMinutes(fullText)
+  if (tzOffsetMin === null) return null
+
+  const [year, month, day] = dateKey.split('-').map(Number)
+  const localMs = Date.UTC(
+    year,
+    month - 1,
+    day,
+    timeInfo.hours,
+    timeInfo.minutes,
+    timeInfo.seconds,
+  )
+  const utcMs = localMs - tzOffsetMin * 60000
+  const utcDate = new Date(utcMs)
+  return utcKeyFromDate(utcDate) + ' UTC'
+}
+
+function parseDateString(value, options = {}) {
+  if (!value) return null
+  const {
+    fallbackYear = null,
+    preferDayFirst = false,
+    created = null,
+    allowAfterCreated = false,
+  } = options
+  const today = dateKeyFromDate(new Date())
+  const createdDate = created ? created.slice(0, 10) : null
+  const cleaned = String(value)
+    .replace(/(\d+)(st|nd|rd|th)/gi, '$1')
+    .replace(/[@,]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+  const validDate = (year, month, day) => {
+    if (year < 2025 || year > 2027) return null
+    if (month < 1 || month > 12 || day < 1 || day > 31) return null
+    const dateKey = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+    if (dateKey > today) return null
+    if (!allowAfterCreated && createdDate && dateKey > createdDate) return null
+    return dateKey
+  }
+
+  const numeric = cleaned.match(/\b(\d{1,4})[/.-](\d{1,2})[/.-](\d{2,4})\b/)
+  if (numeric) {
+    const a = Number(numeric[1])
+    const b = Number(numeric[2])
+    let c = Number(numeric[3])
+    let year
+    let month
+    let day
+    if (numeric[1].length === 4) {
+      year = a
+      month = b
+      day = c
+    } else if (a > 12) {
+      if (c < 100) c += c >= 70 ? 1900 : 2000
+      day = a
+      month = b
+      year = c
+    } else if (b > 12) {
+      if (c < 100) c += c >= 70 ? 1900 : 2000
+      month = a
+      day = b
+      year = c
+    } else if (preferDayFirst) {
+      if (c < 100) c += c >= 70 ? 1900 : 2000
+      day = a
+      month = b
+      year = c
+    } else {
+      if (c < 100) c += c >= 70 ? 1900 : 2000
+      month = a
+      day = b
+      year = c
+    }
+    const result = validDate(year, month, day)
+    // If ambiguous (both a and b <= 12) and result is null, try the alternative interpretation
+    if (!result && a <= 12 && b <= 12 && createdDate) {
+      const altYear = c < 100 ? c + (c >= 70 ? 1900 : 2000) : c
+      const altMonth = preferDayFirst ? a : b
+      const altDay = preferDayFirst ? b : a
+      const altResult = validDate(altYear, altMonth, altDay)
+      if (altResult) return altResult
+    }
+    return result
+  }
+
+  const monthMap = {
+    jan: 1,
+    january: 1,
+    feb: 2,
+    february: 2,
+    mar: 3,
+    march: 3,
+    apr: 4,
+    april: 4,
+    may: 5,
+    jun: 6,
+    june: 6,
+    jul: 7,
+    july: 7,
+    aug: 8,
+    august: 8,
+    sep: 9,
+    sept: 9,
+    september: 9,
+    oct: 10,
+    october: 10,
+    nov: 11,
+    november: 11,
+    dec: 12,
+    december: 12,
+  }
+  const monthFirst = cleaned.match(
+    /\b(jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\b[\s,.-]+(\d{1,2})(?:st|nd|rd|th)?[\s,.-]+(\d{2,4})(?!\s*:)/i,
+  )
+  const dayFirst = cleaned.match(
+    /\b(?:mon(?:day)?|tue(?:sday)?|wed(?:nesday)?|thu(?:rsday)?|fri(?:day)?|sat(?:urday)?|sun(?:day)?)?,?\s*(\d{1,2})(?:st|nd|rd|th)?[\s,.-]+(jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\b[\s,.-]+(\d{2,4})(?!\s*:)/i,
+  )
+  const parts = monthFirst
+    ? {
+        month: monthMap[monthFirst[1].toLowerCase()],
+        day: Number(monthFirst[2]),
+        year: Number(monthFirst[3]),
+      }
+    : dayFirst
+      ? {
+          month: monthMap[dayFirst[2].toLowerCase()],
+          day: Number(dayFirst[1]),
+          year: Number(dayFirst[3]),
+        }
+      : null
+  if (parts) {
+    const year =
+      parts.year < 100
+        ? parts.year + (parts.year >= 70 ? 1900 : 2000)
+        : parts.year
+    return validDate(year, parts.month, parts.day)
+  }
+
+  if (fallbackYear) {
+    const monthDay = cleaned.match(
+      /\b(jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\b[\s,.-]+(\d{1,2})(?:st|nd|rd|th)?\b/i,
+    )
+    if (monthDay) {
+      return validDate(
+        fallbackYear,
+        monthMap[monthDay[1].toLowerCase()],
+        Number(monthDay[2]),
+      )
+    }
+  }
+  return null
+}
+
+function extractDateFromLines(lines, patterns, options = {}) {
+  for (const line of lines) {
+    for (const pattern of patterns) {
+      const match = line.match(pattern)
+      if (!match) continue
+      const beforeMatch = line.slice(0, match.index)
+      const nearbyBefore =
+        beforeMatch.split(/\bedit\s*\d*\s*[-:]|[.;]/i).pop() || ''
+      const parsed =
+        parseDateString(line.slice(match.index), options) ||
+        parseDateString(nearbyBefore, options)
+      if (parsed) return parsed
+    }
+  }
+  return null
+}
+
+function extractDateTimeFromLines(lines, patterns, dateKey, options = {}) {
+  if (!dateKey) return null
+  for (const line of lines) {
+    for (const pattern of patterns) {
+      const match = line.match(pattern)
+      if (!match) continue
+      const fullMatch = line.slice(match.index)
+      const beforeMatch = line.slice(0, match.index)
+      const nearbyBefore =
+        beforeMatch.split(/\bedit\s*\d*\s*[-:]|[.;]/i).pop() || ''
+
+      const parsedFull = parseDateString(fullMatch, options)
+      if (parsedFull === dateKey) {
+        const dt = buildUTCDateTimeDisplay(dateKey, fullMatch)
+        if (dt) return dt
+      }
+
+      const parsedNearby = parseDateString(nearbyBefore, options)
+      if (parsedNearby === dateKey) {
+        const dt = buildUTCDateTimeDisplay(dateKey, nearbyBefore)
+        if (dt) return dt
+      }
+
+      const dt = buildUTCDateTimeDisplay(dateKey, line)
+      if (dt) return dt
+    }
+  }
+  return null
+}
+
+function getFieldValue(line, fieldPattern) {
+  const match = line.match(
+    new RegExp(`^[-\\s]*(?:${fieldPattern})\\s*(?:[:=-]|\\b)\\s*(.*)$`, 'i'),
+  )
+  return match ? match[1] : null
+}
+
+function extractDateFromFieldLines(lines, fieldPattern, options = {}) {
+  for (const line of lines) {
+    const value = getFieldValue(line, fieldPattern)
+    if (value == null) continue
+    const parsed = parseDateString(value, options)
+    if (parsed) return parsed
+  }
+  return null
+}
+
+function hasNegativeFieldValue(lines, fieldPattern) {
+  const negativeValue =
+    /\b(?:not\s+yet|no|nope|none|n\/a|na|pending|waiting|tbd|tba|false)\b/i
+  return lines.some(line => {
+    const value = getFieldValue(line, fieldPattern)
+    return value != null && negativeValue.test(value)
+  })
+}
+
+function hasPositiveFieldValue(lines, fieldPattern) {
+  const positiveValue =
+    /\b(?:yes|yep|true|done|received|sent|shipped|delivered)\b/i
+  return lines.some(line => {
+    const value = getFieldValue(line, fieldPattern)
+    return value != null && positiveValue.test(value)
+  })
+}
+
+function withoutNegativeFieldLines(lines, fieldPattern) {
+  return lines
+    .filter(line => !hasNegativeFieldValue([line], fieldPattern))
+    .join(' ')
+}
+
+function hasNegativeShippingUpdate(text) {
+  return (
+    /\b(?:still\s+)?no\s+shipping\s+(?:update|email|notification)\b/i.test(
+      text,
+    ) || /\b(?:still\s+)?no\s+.*\bemail\s+about\s+finali[sz]ing\b/i.test(text)
+  )
+}
+
+function linesWithoutNegativeShippingUpdates(lines) {
+  return lines.filter(line => !hasNegativeShippingUpdate(line))
+}
+
+function inferStatus(
+  entry,
+  lines,
+  text,
+  confirmDate,
+  shippingDate,
+  arrivalDate,
+) {
+  const shippingNegative = hasNegativeFieldValue(lines, 'shipped|shipping')
+  const deliveryNegative = hasNegativeFieldValue(
+    lines,
+    'delivered|arrived|arrival',
+  )
+  const confirmationNegative = hasNegativeFieldValue(
+    lines,
+    'confirmation|confirmed|confirm',
+  )
+  const shippingPositive = hasPositiveFieldValue(lines, 'shipped|shipping')
+  const deliveryPositive = hasPositiveFieldValue(
+    lines,
+    'delivered|arrived|arrival',
+  )
+  const confirmationPositive = hasPositiveFieldValue(
+    lines,
+    'confirmation|confirmed|confirm',
+  )
+  const waitingPatterns = [
+    /\bno shipping email yet\b/i,
+    /\bno shipping notification yet\b/i,
+    /\bno shipping confirmation yet\b/i,
+    /\bno confirmation email\b/i,
+    /\bno email yet\b/i,
+    /\bstill no email\b/i,
+    /\bnot yet shipped\b/i,
+    /\bnot shipped\b/i,
+    /\bshipping tbd\b/i,
+    /\bno shipping update\b/i,
+    /\bno communication yet\b/i,
+    /\bwaiting\b/i,
+  ]
+  const negativeShippingUpdate = hasNegativeShippingUpdate(text)
+  const hasConfirmationSignal = Boolean(confirmDate || confirmationPositive)
+  if (
+    waitingPatterns.some(pattern => pattern.test(text)) ||
+    negativeShippingUpdate ||
+    (shippingNegative && (confirmationNegative || !hasConfirmationSignal))
+  ) {
+    return 'Waiting'
+  }
+  const deliveryText = withoutNegativeFieldLines(
+    lines,
+    'delivered|arrived|arrival',
+  )
+  if (arrivalDate && !deliveryNegative) return 'Delivered'
+  if (deliveryPositive && !deliveryNegative) return 'Delivered'
+  if (
+    /\b(?:delivered|watch arrived|pebble arrived|received my (?:watch|pebble)|got mine)\b/i.test(
+      deliveryText,
+    )
+  ) {
+    return 'Delivered'
+  }
+  if (shippingPositive && !shippingNegative) return 'Shipped'
+  if (shippingDate && !shippingNegative) return 'Shipped'
+
+  const positiveText = withoutNegativeFieldLines(
+    lines,
+    'shipped|shipping|delivered',
+  )
+  if (
+    /\b(?:shipping label created|shipment notification|tracking number|out for delivery|delivered|in transit|your watch has shipped|shipping email received|shipped on)\b/i.test(
+      positiveText,
+    )
+  ) {
+    return 'Shipped'
+  }
+  if (confirmationPositive && !confirmationNegative) return 'Confirmed'
+  if (confirmDate && !confirmationNegative) return 'Confirmed'
+
+  const confirmationText = withoutNegativeFieldLines(
+    lines,
+    'confirmation|confirmed|confirm',
+  )
+  if (
+    /\b(?:confirmation email|confirm email|confirmation received|address confirmed|color confirmed|colour confirmed|complete your order|finalize order|confirm choices)\b/i.test(
+      confirmationText,
+    )
+  ) {
+    return 'Confirmed'
+  }
+  return entry.status || 'Unknown'
+}
+
+function normalizeEntry(entry) {
+  const lines = cleanLines(entry.body)
+  const text = cleanBodyText(entry.body)
+  const createdYear = entry.created
+    ? new Date(entry.created).getUTCFullYear()
+    : null
+  const fallbackYear =
+    createdYear >= 2025 && createdYear <= 2027 ? createdYear : null
+  const country = inferCountry(entry, lines, text)
+  const numericDates = [
+    ...text.matchAll(/\b(\d{1,2})[/.-](\d{1,2})[/.-]\d{2,4}\b/g),
+  ]
+  const hasMonthFirstEvidence = numericDates.some(
+    match => Number(match[1]) <= 12 && Number(match[2]) > 12,
+  )
+  const hasDayFirstEvidence = numericDates.some(
+    match => Number(match[1]) > 12 && Number(match[2]) <= 12,
+  )
+  const preferDayFirstDates =
+    hasDayFirstEvidence ||
+    (!hasMonthFirstEvidence &&
+      country !== 'US' &&
+      (country !== 'Unknown' ||
+        /\bcolour\b/i.test(text) ||
+        /\bgmt\s*[+-]\s*\d{1,2}\b/i.test(text)))
+
+  const dateOptions = {
+    fallbackYear,
+    preferDayFirst: preferDayFirstDates,
+    created: entry.created,
+  }
+
+  const orderDate =
+    entry.orderDate ||
+    extractDateFromLines(
+      lines,
+      [/\border(?:ed| date| time| date\/time)?\b/i, /\bpre-?order(?:ed)?\b/i],
+      dateOptions,
+    )
+  const confirmDate =
+    entry.confirmDate ||
+    extractDateFromLines(
+      lines,
+      [
+        /\bconfirm/i,
+        /\bconfirmation\b/i,
+        /\bcomplete your order\b/i,
+        /\bfinalize order\b/i,
+      ],
+      {...dateOptions, allowAfterCreated: true},
+    )
+  const shippingDate =
+    entry.shippingDate ||
+    extractDateFromLines(
+      linesWithoutNegativeShippingUpdates(lines),
+      [
+        /\bshipping\b/i,
+        /\bshipment\b/i,
+        /\bshipped\b/i,
+        /\btracking\b/i,
+        /\bdelivered\b/i,
+      ],
+      {...dateOptions, allowAfterCreated: true},
+    )
+  const arrivalDate =
+    entry.arrivalDate ||
+    extractDateFromFieldLines(lines, 'delivered|arrived|arrival', {
+      ...dateOptions,
+      allowAfterCreated: true,
+    })
+
+  const orderPatterns = [
+    /\border(?:ed| date| time| date\/time)?\b/i,
+    /\bpre-?order(?:ed)?\b/i,
+  ]
+  const confirmPatterns = [
+    /\bconfirm/i,
+    /\bconfirmation\b/i,
+    /\bcomplete your order\b/i,
+    /\bfinalize order\b/i,
+  ]
+  const shippingPatterns = [
+    /\bshipping\b/i,
+    /\bshipment\b/i,
+    /\bshipped\b/i,
+    /\btracking\b/i,
+    /\bdelivered\b/i,
+  ]
+  const arrivalPatterns = [/\bdelivered\b/i, /\barrived\b/i, /\barrival\b/i]
+
+  const orderDateTime = extractDateTimeFromLines(
+    lines,
+    orderPatterns,
+    orderDate,
+    dateOptions,
+  )
+  const confirmDateTime = extractDateTimeFromLines(
+    lines,
+    confirmPatterns,
+    confirmDate,
+    {...dateOptions, allowAfterCreated: true},
+  )
+  const shippingDateTime = extractDateTimeFromLines(
+    linesWithoutNegativeShippingUpdates(lines),
+    shippingPatterns,
+    shippingDate,
+    {...dateOptions, allowAfterCreated: true},
+  )
+  const arrivalDateTime = extractDateTimeFromLines(
+    lines,
+    arrivalPatterns,
+    arrivalDate,
+    {...dateOptions, allowAfterCreated: true},
+  )
+  const tax = extractTax(entry, lines, text)
+
+  return {
+    ...entry,
+    device: inferDevice(entry, text),
+    color: inferColor(entry, text),
+    country,
+    continent: inferContinent(country),
+    batch: inferBatch(entry, text),
+    orderDate,
+    confirmDate,
+    shippingDate,
+    arrivalDate,
+    orderDateTime,
+    confirmDateTime,
+    shippingDateTime,
+    arrivalDateTime,
+    tax: tax.taxDisplay,
+    ...tax,
+    status: inferStatus(
+      entry,
+      lines,
+      text,
+      confirmDate,
+      shippingDate,
+      arrivalDate,
+    ),
+  }
+}
+
+function isLikelyReport(entry) {
+  if (isTipsPost(entry.body)) return false
+
+  const hasTimelineSignal = Boolean(
+    entry.orderDate ||
+      entry.confirmDate ||
+      entry.shippingDate ||
+      entry.arrivalDate ||
+      entry.status === 'Delivered' ||
+      entry.status === 'Shipped' ||
+      entry.batch !== 'Unknown',
+  )
+  const hasDescriptorSignal = Boolean(
+    entry.device !== 'Unknown' ||
+      entry.color !== 'Unknown' ||
+      entry.country !== 'Unknown',
+  )
+  return hasTimelineSignal && hasDescriptorSignal
+}
+
+export {isLikelyReport, normalizeEntry}

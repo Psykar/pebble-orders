@@ -1,0 +1,228 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pebble Shipping Dashboard</title>
+    <meta name="theme-color" content="#111125">
+    <link rel="modulepreload" href="dashboard.js">
+    <link rel="stylesheet" href="styles.css">
+  </head>
+
+  <body>
+    <header>
+      <h1>Pebble Shipping Dashboard</h1>
+      <p class="subtitle">
+        Live tracking of the 2026 Pebble rollout, based on community-submitted
+        reports from r/pebble.
+      </p>
+      <p id="post-info">Loading data…</p>
+      <div
+        class="loading-status"
+        id="loading-status"
+        role="status"
+        aria-live="polite"
+        hidden
+      >
+        <span class="loading-spinner" aria-hidden="true"></span>
+        <span id="loading-status-text">Fetching Reddit data…</span>
+      </div>
+      <div class="progress-wrap">
+        <div class="progress-row">
+          <span>Overall rollout progress</span>
+          <span id="progress-label"></span>
+        </div>
+        <div class="progress-bar" id="progress-bar">
+          <div class="progress-seg delivered"></div>
+          <div class="progress-seg shipped"></div>
+          <div class="progress-seg confirmed"></div>
+          <div class="progress-seg waiting"></div>
+        </div>
+      </div>
+    </header>
+
+    <div class="stat-cards" id="stat-cards"></div>
+
+    <div class="filter-bar">
+      <div class="filter-inner">
+        <section
+          class="filter-controls"
+          id="filter-controls"
+          aria-label="Report filters"
+        >
+          <div class="filter-group" id="filter-status">
+            <span class="filter-label">Status</span>
+          </div>
+          <div class="filter-group" id="filter-batch">
+            <span class="filter-label">Batch</span>
+          </div>
+          <div class="filter-group" id="filter-color">
+            <span class="filter-label">Color</span>
+          </div>
+          <div class="filter-group" id="filter-device">
+            <span class="filter-label">Device</span>
+          </div>
+          <div class="filter-group" id="filter-continent">
+            <span class="filter-label">Continent</span>
+          </div>
+        </section>
+        <div class="search-wrap">
+          <svg
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            aria-hidden="true"
+          >
+            <circle cx="11" cy="11" r="7" />
+            <line x1="21" y1="21" x2="16.65" y2="16.65" />
+          </svg>
+          <input
+            id="search-input"
+            type="search"
+            placeholder="Search author, country, body…"
+            aria-label="Search reports"
+          >
+        </div>
+        <button
+          class="filter-toggle"
+          id="filter-toggle"
+          type="button"
+          aria-controls="filter-controls"
+          aria-expanded="false"
+        >
+          <span>Filters</span>
+          <span
+            class="filter-active-count"
+            id="filter-active-count"
+            hidden
+          ></span>
+        </button>
+        <button class="filter-reset" id="filter-reset" type="button">
+          Reset
+        </button>
+      </div>
+    </div>
+
+    <div class="dashboard">
+      <div class="charts-grid">
+        <div class="card card-status">
+          <div class="card-head">
+            <h3>Shipping Status</h3>
+            <span class="card-hint">Distribution</span>
+          </div>
+          <div class="chart-wrap"><canvas id="chartStatus"></canvas></div>
+        </div>
+        <div class="card card-model">
+          <div class="card-head">
+            <h3>Model &amp; Color</h3>
+            <span class="card-hint">Stacked</span>
+          </div>
+          <div class="chart-wrap"><canvas id="chartDeviceColor"></canvas></div>
+        </div>
+        <div class="card card-countries">
+          <div class="card-head">
+            <h3>Top Countries</h3>
+            <span class="card-hint">Top 12</span>
+          </div>
+          <div class="chart-wrap"><canvas id="chartCountries"></canvas></div>
+        </div>
+        <div class="card card-timeline">
+          <div class="card-head">
+            <h3>Cumulative Timeline</h3>
+            <span class="card-hint">Orders → Delivered</span>
+          </div>
+          <div class="chart-wrap"><canvas id="chartTimeline"></canvas></div>
+        </div>
+        <div class="card card-momentum">
+          <div class="card-head">
+            <h3>Shipping Momentum</h3>
+            <span class="card-hint">Recent movement</span>
+          </div>
+          <div class="chart-wrap"><canvas id="chartMomentum"></canvas></div>
+        </div>
+        <div class="card card-batch">
+          <div class="card-head">
+            <h3>Batch Progress</h3>
+            <span class="card-hint">Status by batch</span>
+          </div>
+          <div class="insight-panel" id="batch-progress"></div>
+        </div>
+        <div class="card card-batch-summary">
+          <div class="card-head">
+            <h3>Cycle Time</h3>
+            <span class="card-hint">Average duration</span>
+          </div>
+          <div class="chart-wrap"><canvas id="chartCycleTime"></canvas></div>
+        </div>
+      </div>
+
+      <div class="table-wrap">
+        <div class="table-head">
+          <h3>All Reports</h3>
+          <span class="count-badge" id="table-count"></span>
+        </div>
+        <div class="table-scroll">
+          <table id="data-table">
+            <thead>
+              <tr>
+                <th data-sort="author">
+                  Author <span class="sort-icon">↕</span>
+                </th>
+                <th data-sort="device">
+                  Device <span class="sort-icon">↕</span>
+                </th>
+                <th data-sort="color">
+                  Color <span class="sort-icon">↕</span>
+                </th>
+                <th data-sort="country">
+                  Country <span class="sort-icon">↕</span>
+                </th>
+                <th data-sort="batch">
+                  Batch <span class="sort-icon">↕</span>
+                </th>
+                <th data-sort="status">
+                  Status <span class="sort-icon">↕</span>
+                </th>
+                <th data-sort="orderDate">
+                  Ordered (UTC) <span class="sort-icon">↕</span>
+                </th>
+                <th data-sort="confirmDate">
+                  Confirmed (UTC) <span class="sort-icon">↕</span>
+                </th>
+                <th data-sort="taxAmount">
+                  Tax <span class="sort-icon">↕</span>
+                </th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <div class="pagination" id="pagination"></div>
+      </div>
+    </div>
+
+    <footer>
+      Data from
+      <a
+        href="https://www.reddit.com/r/pebble/comments/1sjk3c7/shipping_mega_thread"
+        target="_blank"
+        rel="noopener"
+        >r/pebble Shipping Mega Thread</a
+      >
+      ·
+      <a
+        href="https://github.com/myNameArnav/pebble-dash"
+        target="_blank"
+        rel="noopener"
+        >GitHub</a
+      >
+      · Click any row to view the full report
+    </footer>
+    <script type="module" src="dashboard.js"></script>
+  </body>
+</html>

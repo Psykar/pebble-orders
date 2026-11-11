@@ -1,0 +1,51 @@
+{
+  "$schema": "https://developers.reddit.com/schema/config-file.v1.json",
+  "name": "pebble-orders",
+  "permissions": {
+    "reddit": {"enable": true},
+    "redis": true
+  },
+  "post": {
+    "entrypoints": {
+      "default": {
+        "entry": "splash.html"
+      },
+      "dashboard": {
+        "entry": "dashboard.html"
+      }
+    }
+  },
+  "server": {},
+  "menu": {
+    "items": [
+      {
+        "label": "[pebble-orders] New Post",
+        "description": "Create a new Pebble shipping dashboard post.",
+        "location": "subreddit",
+        "forUserType": "moderator",
+        "endpoint": "/internal/on/menu/new-post"
+      },
+      {
+        "label": "[pebble-orders] Refresh Reports",
+        "description": "Re-read the shipping mega thread now.",
+        "location": "subreddit",
+        "forUserType": "moderator",
+        "endpoint": "/internal/on/menu/refresh"
+      }
+    ]
+  },
+  "triggers": {
+    "onAppInstall": "/internal/on/app/install"
+  },
+  "scheduler": {
+    "tasks": {
+      "refresh-reports": {
+        "endpoint": "/internal/scheduler/refresh-reports",
+        "cron": "*/15 * * * *"
+      }
+    }
+  },
+  "scripts": {
+    "dev": "npm run watch"
+  }
+}
