@@ -99,6 +99,8 @@ function normalizeCountry(value) {
   return aliases[v] || toTitleCase(v)
 }
 
+const shortCountryCodes = new Set(['US', 'UK', 'UAE'])
+
 function inferCountry(entry, lines, text) {
   if (entry.country && entry.country !== 'Unknown') return entry.country
 
@@ -337,10 +339,22 @@ function inferCountry(entry, lines, text) {
   }
 
   for (const name of countryNames) {
+    if (shortCountryCodes.has(name)) continue
     if (new RegExp(`\\b${name.replace(/ /g, '\\s+')}\\b`, 'i').test(text)) {
       return normalizeCountry(name)
     }
   }
+  // Codes match case-sensitively in free text: lowercase "us" is the pronoun.
+  // The first one mentioned wins; later ones tend to be quotes or asides.
+  const codeMatches = [
+    ['US', /\b(?:USA|US|U\.S\.A?\.?)(?=[\s,.;:!)/]|$)/],
+    ['UK', /\bUK\b/],
+    ['UAE', /\bUAE\b/],
+  ]
+    .map(([code, pattern]) => [code, text.search(pattern)])
+    .filter(([, index]) => index >= 0)
+    .sort((a, b) => a[1] - b[1])
+  if (codeMatches.length) return codeMatches[0][0]
   return entry.country || 'Unknown'
 }
 
@@ -625,7 +639,8 @@ function inferColor(entry, text) {
 
 function inferBatch(entry, text) {
   if (entry.batch && entry.batch !== 'Unknown') return entry.batch
-  const match = text.match(/\bbatch\s*[:#-]?\s*([1-5])\b/i)
+  // Pebble's emails call batches "waves".
+  const match = text.match(/\b(?:batch|wave)\s*[:#-]?\s*([1-5])\b/i)
   return match ? `Batch ${match[1]}` : entry.batch || 'Unknown'
 }
 
@@ -1107,7 +1122,7 @@ function inferStatus(
   if (arrivalDate && !deliveryNegative) return 'Delivered'
   if (deliveryPositive && !deliveryNegative) return 'Delivered'
   if (
-    /\b(?:delivered|watch arrived|pebble arrived|received my (?:watch|pebble)|got mine)\b/i.test(
+    /\b(?:delivered|watch arrived|pebble arrived|received my (?:watch|pebble)|got mine|arrived\s+(?:today|yesterday|on\b|\d))\b/i.test(
       deliveryText,
     )
   ) {
@@ -1121,7 +1136,7 @@ function inferStatus(
     'shipped|shipping|delivered',
   )
   if (
-    /\b(?:shipping label created|shipment notification|tracking number|out for delivery|delivered|in transit|your watch has shipped|shipping email received|shipped on)\b/i.test(
+    /\b(?:shipping label created|shipment notification|shipping notification|tracking number|out for delivery|delivered|in transit|your watch has shipped|shipping email received|shipped on|shipped (?:today|yesterday)|just shipped)\b/i.test(
       positiveText,
     )
   ) {
@@ -1135,7 +1150,7 @@ function inferStatus(
     'confirmation|confirmed|confirm',
   )
   if (
-    /\b(?:confirmation email|confirm email|confirmation received|address confirmed|color confirmed|colour confirmed|complete your order|finalize order|confirm choices)\b/i.test(
+    /\b(?:confirmation e-?mail|confirmation mail|confirm email|confirmation received|address confirmed|color confirmed|colour confirmed|complete your order|finalize order|confirm choices|confirmation!)/i.test(
       confirmationText,
     )
   ) {
@@ -1208,12 +1223,17 @@ function normalizeEntry(entry) {
       ],
       {...dateOptions, allowAfterCreated: true},
     )
+  // "Delivery" lines can hold an estimate, so they only fill in when no
+  // delivered/arrived line has a date.
+  const arrivalOptions = {...dateOptions, allowAfterCreated: true}
   const arrivalDate =
     entry.arrivalDate ||
-    extractDateFromFieldLines(lines, 'delivered|arrived|arrival', {
-      ...dateOptions,
-      allowAfterCreated: true,
-    })
+    extractDateFromFieldLines(
+      lines,
+      'delivered|arrived|arrival',
+      arrivalOptions,
+    ) ||
+    extractDateFromFieldLines(lines, 'delivery', arrivalOptions)
 
   const orderPatterns = [
     /\border(?:ed| date| time| date\/time)?\b/i,
@@ -1232,7 +1252,12 @@ function normalizeEntry(entry) {
     /\btracking\b/i,
     /\bdelivered\b/i,
   ]
-  const arrivalPatterns = [/\bdelivered\b/i, /\barrived\b/i, /\barrival\b/i]
+  const arrivalPatterns = [
+    /\bdelivered\b/i,
+    /\barrived\b/i,
+    /\barrival\b/i,
+    /\bdelivery\s*:/i,
+  ]
 
   const orderDateTime = extractDateTimeFromLines(
     lines,
@@ -1298,6 +1323,7 @@ function isLikelyReport(entry) {
       entry.arrivalDate ||
       entry.status === 'Delivered' ||
       entry.status === 'Shipped' ||
+      entry.status === 'Confirmed' ||
       entry.batch !== 'Unknown',
   )
   const hasDescriptorSignal = Boolean(
@@ -1305,7 +1331,17 @@ function isLikelyReport(entry) {
       entry.color !== 'Unknown' ||
       entry.country !== 'Unknown',
   )
-  return hasTimelineSignal && hasDescriptorSignal
+  // Without a device, colour or country, only a timeline that can't be chatter
+  // counts: two or more dated milestones, or a batch and a date.
+  const dates = [
+    entry.orderDate,
+    entry.confirmDate,
+    entry.shippingDate,
+    entry.arrivalDate,
+  ].filter(Boolean).length
+  const hasStrongTimeline =
+    dates >= 2 || (dates >= 1 && entry.batch !== 'Unknown')
+  return hasTimelineSignal && (hasDescriptorSignal || hasStrongTimeline)
 }
 
 export {isLikelyReport, normalizeEntry}
