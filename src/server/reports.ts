@@ -130,6 +130,13 @@ export async function fetchReports(threadId: T3): Promise<ReportsRsp> {
         `gone [${recheck.gone.join(' ')}]; ` +
         `unverified [${recheck.unverified.map(k => `${k.id}×${k.failedChecks}`).join(' ')}]`,
     )
+  // Live comments the parser rejected: chatter, or reports in a format it
+  // doesn't recognise yet.
+  const notReports = scanned.filter(c => !isGone(c) && !toEntry(post.id, c))
+  console.log(
+    `${threadId} not reports: ${scanned.filter(isGone).length} deleted or removed; ` +
+      `${notReports.length} unparsed [${notReports.map(c => c.id).join(' ')}]`,
+  )
   return buildReports(post, [...live, ...recheck.unverified.map(fromKnown)])
 }
 
@@ -204,17 +211,26 @@ function fromKnown(k: KnownComment): ThreadComment {
   return {...k, createdAt: new Date(k.createdAt)}
 }
 
+/** Deleted or removed, by its author, a moderator or account deletion. */
+function isGone(comment: Readonly<ThreadComment>): boolean {
+  // Deleted accounts all share the name [deleted], which would merge their
+  // reports when deduping by author.
+  return (
+    Boolean(comment.removed) ||
+    !comment.authorName ||
+    comment.authorName === '[deleted]' ||
+    !comment.body ||
+    comment.body === '[deleted]' ||
+    comment.body === '[removed]'
+  )
+}
+
 /** The comment's report, or undefined if it isn't a live top-level report. */
 function toEntry(
   postId: T3,
   comment: Readonly<ThreadComment>,
 ): Entry | undefined {
-  if (comment.parentId !== postId || comment.removed) return
-  // Deleted accounts all share the name [deleted], which would merge their
-  // reports when deduping by author.
-  if (!comment.authorName || comment.authorName === '[deleted]') return
-  if (!comment.body) return
-  if (comment.body === '[deleted]' || comment.body === '[removed]') return
+  if (comment.parentId !== postId || isGone(comment)) return
   const entry = normalizeEntry({
     author: comment.authorName,
     body: comment.body,
