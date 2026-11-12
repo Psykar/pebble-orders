@@ -1,5 +1,5 @@
 import {reddit, settings} from '@devvit/web/server'
-import type {T3} from '@devvit/web/shared'
+import type {T1, T3} from '@devvit/web/shared'
 import type {ReportsRsp} from '../shared/api.ts'
 import {
   type Entry,
@@ -7,6 +7,7 @@ import {
   normalizeEntry,
   type ReportStatus,
 } from '../shared/parser.js'
+import {dbGetKnownComments, dbSetKnownComments} from './db.ts'
 
 /** Must match the `settings.subreddit` key in devvit.json. */
 export const megaThreadSetting = 'megaThread'
@@ -43,6 +44,8 @@ export type ThreadComment = {
   parentId: string
   permalink: string
   score: number
+  /** Set when a moderator removed it; an app that isn't a moderator sees false. */
+  removed?: boolean
 }
 
 export type ThreadPost = {
@@ -62,39 +65,141 @@ const statusRank: {[status in ReportStatus]: number} = {
   Unknown: 0,
 }
 
-/** Fetches every top-level comment on the mega thread and parses them. */
-// A getComments pass can silently miss top-level comments on a big thread: when
-// a "load more" batch overflows, @devvit/reddit 0.15.3 drops the leftover IDs
-// Reddit hands back. Batches of 100 lost ~30% here; ~50 loses far fewer. Extra
-// passes in other sort orders recover more but each costs ~25 API calls, and
-// two in parallel at 50 hit Reddit's rate limit.
-const commentSorts = ['new'] as const
+/**
+ * A report comment remembered between refreshes, so a scan that misses it can
+ * recheck it by ID.
+ */
+export type KnownComment = Omit<ThreadComment, 'createdAt'> & {
+  createdAt: string
+  /** Consecutive refreshes where neither the scan nor a recheck found it. */
+  failedChecks: number
+}
 
+// A getComments scan can silently miss top-level comments on a big thread:
+// when a "load more" batch overflows, @devvit/reddit 0.15.3 drops the leftover
+// IDs Reddit hands back. Batches of 100 lost ~30% here; ~50 loses far fewer.
+// Rechecking by ID covers the rest.
+const scanPageSize = 50
+// A failed recheck (rate limit, outage) keeps the remembered copy, but only for
+// this many refreshes (~15 min each), so deleted content leaves storage within
+// ~1 h even if Reddit never reports it deleted.
+const maxFailedChecks = 4
+// Bounds API calls per refresh; Reddit rate-limits ~50 calls in a burst.
+// Comments over the cap count as a failed check and go first next time.
+const maxRechecks = 150
+const recheckConcurrency = 5
+
+/** Fetches every top-level comment on the mega thread and parses them. */
 export async function fetchReports(threadId: T3): Promise<ReportsRsp> {
   const post = await reddit.getPostById(threadId)
-  const passes = await Promise.all(
-    commentSorts.map(sort =>
-      reddit
-        .getComments({
-          postId: threadId,
-          depth: 1,
-          limit: 10_000,
-          pageSize: 50,
-          sort,
-        })
-        .all(),
-    ),
-  )
-  const comments = new Map<string, ThreadComment>()
-  for (const pass of passes) for (const c of pass) comments.set(c.id, c)
-  const passCounts = commentSorts.map(
-    (sort, i) => `${sort}-first ${passes[i]?.length}`,
-  )
+  const scanned = await reddit
+    .getComments({
+      postId: threadId,
+      depth: 1,
+      limit: 10_000,
+      pageSize: scanPageSize,
+      sort: 'new',
+    })
+    .all()
+  const seen = new Set<string>(scanned.map(c => c.id))
+  const missed = (await dbGetKnownComments(threadId))
+    .filter(k => !seen.has(k.id))
+    .sort((a, b) => b.failedChecks - a.failedChecks)
+  const recheck = await recheckComments(post.id, missed)
+
+  const live = [...scanned, ...recheck.found]
+  const known: KnownComment[] = [
+    ...live.filter(c => toEntry(post.id, c)).map(c => toKnownComment(c, 0)),
+    ...recheck.unverified,
+  ]
+  await dbSetKnownComments(threadId, known)
   // numberOfComments includes replies, so it bounds the top-level count.
   console.log(
-    `${threadId} top-level comments: ${passCounts.join(', ')}, merged ${comments.size}; thread total incl. replies ${post.numberOfComments}`,
+    `${threadId}: scan found ${scanned.length} top-level comments; ` +
+      `${missed.length} remembered reports missed, of which ` +
+      `${recheck.found.length} still exist, ${recheck.gone} are gone, ` +
+      `${recheck.unverified.length} unverified; ` +
+      `thread total incl. replies ${post.numberOfComments}`,
   )
-  return buildReports(post, [...comments.values()])
+  return buildReports(post, [...live, ...recheck.unverified.map(fromKnown)])
+}
+
+async function recheckComments(
+  postId: T3,
+  missed: readonly KnownComment[],
+): Promise<{found: ThreadComment[]; gone: number; unverified: KnownComment[]}> {
+  const found: ThreadComment[] = []
+  const unverified: KnownComment[] = []
+  let gone = 0
+  const failCheck = (k: KnownComment): void => {
+    if (k.failedChecks + 1 < maxFailedChecks)
+      unverified.push({...k, failedChecks: k.failedChecks + 1})
+    else gone++
+  }
+
+  const queue = missed.slice(0, maxRechecks)
+  for (const k of missed.slice(maxRechecks)) failCheck(k)
+  const worker = async (): Promise<void> => {
+    for (let k = queue.shift(); k; k = queue.shift()) {
+      let comment: ThreadComment
+      try {
+        comment = await reddit.getCommentById(k.id as T1)
+      } catch {
+        failCheck(k)
+        continue
+      }
+      if (toEntry(postId, comment)) found.push(comment)
+      else gone++
+    }
+  }
+  await Promise.all(Array.from({length: recheckConcurrency}, worker))
+  return {found, gone, unverified}
+}
+
+function toKnownComment(c: ThreadComment, failedChecks: number): KnownComment {
+  return {
+    id: c.id,
+    authorName: c.authorName,
+    body: c.body,
+    createdAt: c.createdAt.toISOString(),
+    parentId: c.parentId,
+    permalink: c.permalink,
+    score: c.score,
+    failedChecks,
+  }
+}
+
+function fromKnown(k: KnownComment): ThreadComment {
+  return {...k, createdAt: new Date(k.createdAt)}
+}
+
+/** The comment's report, or undefined if it isn't a live top-level report. */
+function toEntry(
+  postId: T3,
+  comment: Readonly<ThreadComment>,
+): Entry | undefined {
+  if (comment.parentId !== postId || comment.removed) return
+  // Deleted accounts all share the name [deleted], which would merge their
+  // reports when deduping by author.
+  if (!comment.authorName || comment.authorName === '[deleted]') return
+  if (!comment.body) return
+  if (comment.body === '[deleted]' || comment.body === '[removed]') return
+  const entry = normalizeEntry({
+    author: comment.authorName,
+    body: comment.body,
+    created: comment.createdAt.toISOString(),
+    score: comment.score,
+    permalink: absolutePermalink(comment.permalink),
+    device: 'Unknown',
+    color: 'Unknown',
+    country: 'Unknown',
+    batch: 'Unknown',
+    status: 'Unknown',
+    orderDate: null,
+    confirmDate: null,
+    shippingDate: null,
+  })
+  return isLikelyReport(entry) ? entry : undefined
 }
 
 export function buildReports(
@@ -103,28 +208,8 @@ export function buildReports(
 ): ReportsRsp {
   const parsed: Entry[] = []
   for (const comment of comments) {
-    if (comment.parentId !== post.id) continue
-    // Deleted accounts all share the name [deleted], which would merge their
-    // reports when deduping by author.
-    if (!comment.authorName || comment.authorName === '[deleted]') continue
-    if (!comment.body) continue
-    if (comment.body === '[deleted]' || comment.body === '[removed]') continue
-    const entry = normalizeEntry({
-      author: comment.authorName,
-      body: comment.body,
-      created: comment.createdAt.toISOString(),
-      score: comment.score,
-      permalink: absolutePermalink(comment.permalink),
-      device: 'Unknown',
-      color: 'Unknown',
-      country: 'Unknown',
-      batch: 'Unknown',
-      status: 'Unknown',
-      orderDate: null,
-      confirmDate: null,
-      shippingDate: null,
-    })
-    if (isLikelyReport(entry)) parsed.push(entry)
+    const entry = toEntry(post.id, comment)
+    if (entry) parsed.push(entry)
   }
 
   return {

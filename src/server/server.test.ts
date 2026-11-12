@@ -23,10 +23,36 @@ const redisGet = redis.get.bind(redis)
 const redisSet = redis.set.bind(redis)
 const redditGetPostById = reddit.getPostById.bind(reddit)
 const redditGetComments = reddit.getComments.bind(reddit)
+const redditGetCommentById = reddit.getCommentById.bind(reddit)
 const settingsGet = settings.get.bind(settings)
 
 const reportBody =
   'Model: Pebble Time 2\nOrdered: 2025-03-24\nBatch: 2\nDestination: Canada\nColor: Silver/Grey'
+const threadComments = (threadId: string) => [
+  {
+    id: 't1_abc123',
+    authorName: 'test_user',
+    body: reportBody,
+    createdAt: new Date('2026-05-01T00:00:00Z'),
+    parentId: threadId,
+    permalink: '/r/pebble/comments/1sjk3c7/_/abc123/',
+    score: 1,
+  },
+  {
+    id: 't1_def456',
+    authorName: 'chatty_user',
+    body: 'Any news from the UK?',
+    createdAt: new Date('2026-05-02T00:00:00Z'),
+    parentId: threadId,
+    permalink: '/r/pebble/comments/1sjk3c7/_/def456/',
+    score: 1,
+  },
+]
+/** Comment IDs the next scans skip, standing in for the SDK dropping them. */
+let scanSkips = new Set<string>()
+/** What getCommentById returns; a missing ID throws. */
+let commentsById = new Map<string, ReturnType<typeof threadComments>[number]>()
+let commentByIdCalls = 0
 
 before(async () => {
   redis.get = async key => redisValues.get(key)
@@ -48,31 +74,15 @@ before(async () => {
       numberOfComments: 2,
     }
   }) as unknown as typeof reddit.getPostById
-  reddit.getComments = (({postId}: {postId: string}) => {
-    const threadId = postId
-    return {
-      all: async () => [
-        {
-          id: 't1_abc123',
-          authorName: 'test_user',
-          body: reportBody,
-          createdAt: new Date('2026-05-01T00:00:00Z'),
-          parentId: threadId,
-          permalink: '/r/pebble/comments/1sjk3c7/_/abc123/',
-          score: 1,
-        },
-        {
-          id: 't1_def456',
-          authorName: 'chatty_user',
-          body: 'Any news from the UK?',
-          createdAt: new Date('2026-05-02T00:00:00Z'),
-          parentId: threadId,
-          permalink: '/r/pebble/comments/1sjk3c7/_/def456/',
-          score: 1,
-        },
-      ],
-    }
-  }) as unknown as typeof reddit.getComments
+  reddit.getComments = (({postId}: {postId: string}) => ({
+    all: async () => threadComments(postId).filter(c => !scanSkips.has(c.id)),
+  })) as unknown as typeof reddit.getComments
+  reddit.getCommentById = (async (id: string) => {
+    commentByIdCalls++
+    const comment = commentsById.get(id)
+    if (!comment) throw Error('rate limited')
+    return comment
+  }) as unknown as typeof reddit.getCommentById
 
   server = createServer(async (req, rsp) => {
     await runWithContext(
@@ -97,6 +107,7 @@ after(async () => {
   redis.set = redisSet
   reddit.getPostById = redditGetPostById
   reddit.getComments = redditGetComments
+  reddit.getCommentById = redditGetCommentById
   settings.get = settingsGet
   if (!server.listening) return
   await new Promise<void>((resolve, reject) => {
@@ -108,6 +119,56 @@ beforeEach(() => {
   redisValues.clear()
   threadFetches = 0
   megaThread = undefined
+  scanSkips = new Set()
+  commentsById = new Map()
+  commentByIdCalls = 0
+})
+
+async function refresh(): Promise<ReportsRsp> {
+  const rsp = await fetch(`${serverURL}/${Endpoint.OnRefreshTask}`, {
+    method: 'POST',
+  })
+  assert.equal(rsp.status, 200)
+  const reports = await (
+    await fetch(`${serverURL}/${Endpoint.GetReports}`)
+  ).json()
+  return reports as ReportsRsp
+}
+
+const authors = (reports: ReportsRsp): string[] =>
+  reports.entries.map(entry => entry.author)
+
+test('a report the scan misses is kept while a recheck finds it', async () => {
+  await refresh()
+  scanSkips = new Set(['t1_abc123'])
+  const [report] = threadComments('t3_1sjk3c7')
+  if (report) commentsById.set(report.id, report)
+  assert.deepEqual(authors(await refresh()), ['test_user'])
+  assert.deepEqual(authors(await refresh()), ['test_user'])
+  assert.equal(commentByIdCalls, 2)
+})
+
+test('a missed report that was deleted is dropped', async () => {
+  await refresh()
+  scanSkips = new Set(['t1_abc123'])
+  const [report] = threadComments('t3_1sjk3c7')
+  if (report)
+    commentsById.set(report.id, {
+      ...report,
+      authorName: '[deleted]',
+      body: '[deleted]',
+    })
+  assert.deepEqual(authors(await refresh()), [])
+  assert.deepEqual(authors(await refresh()), [])
+  assert.equal(commentByIdCalls, 1)
+})
+
+test('a missed report that fails rechecks is dropped after 4 refreshes', async () => {
+  await refresh()
+  scanSkips = new Set(['t1_abc123'])
+  for (let i = 1; i < 4; i++)
+    assert.deepEqual(authors(await refresh()), ['test_user'], `refresh ${i}`)
+  assert.deepEqual(authors(await refresh()), [])
 })
 
 test('get reports fetches once then serves the cache', async () => {
