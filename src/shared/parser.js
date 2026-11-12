@@ -344,28 +344,50 @@ function inferCountry(entry, lines, text) {
   return entry.country || 'Unknown'
 }
 
+// Order matters in the plain-mention fallback: when a report names several
+// devices with no switch or model line, the earlier pattern wins.
+const devicePatterns = [
+  ['Pebble Time 2', String.raw`pebble\s*time\s*2|pt2|time\s*2`],
+  ['Pebble Round', String.raw`pebble\s*round(?:\s*2)?|round\s*2|pr2`],
+  ['Pebble Index', String.raw`pebble\s*index|index\s*0?1|index`],
+  ['Pebble Duo 2', String.raw`pebble\s*(?:time\s*)?duo\s*2|p2d|duo\s*2`],
+]
+const anyDevice = devicePatterns
+  .map(([, pattern], i) => `(?<d${i}>${pattern})`)
+  .join('|')
+
+function deviceAt(match) {
+  const i = Object.entries(match.groups).findIndex(([, v]) => v !== undefined)
+  return devicePatterns[i][0]
+}
+
+/** Device in the last "switched to X" or "→ X" note, if any. */
+function switchedDevice(text) {
+  const switchTo = new RegExp(
+    String.raw`(?:\b(?:switch(?:ed)?|chang(?:ed|e)|swap(?:ped)?|upgraded|moved)\b[^.\n]{0,40}?\bto\s+(?:an?\s+|the\s+)?|(?:->|→|=>)\s*)\b(?:${anyDevice})\b`,
+    'gi',
+  )
+  const matches = [...text.matchAll(switchTo)]
+  const last = matches.at(-1)
+  return last ? deviceAt(last) : null
+}
+
+/** First device named on a "Model:" template line, if any. */
+function modelLineDevice(text) {
+  const line = text.match(/^[\W_]*model\s*:(.*)$/im)?.[1]
+  const match = line?.match(new RegExp(String.raw`\b(?:${anyDevice})\b`, 'i'))
+  return match ? deviceAt(match) : null
+}
+
 function inferDevice(entry, text) {
-  if (
-    /\b(?:switched|changed|selected)(?:\s+my)?\s+(?:to\s+)?(?:pebble\s+time\s+2|pt2|time\s+2)\b/i.test(
-      text,
-    )
-  )
-    return 'Pebble Time 2'
-  if (/\b(?:pebble\s+time\s+2|pt2|time\s+2)\b/i.test(text))
-    return 'Pebble Time 2'
-  if (/\b(?:pebble\s+round|round\s*2|pr2)\b/i.test(text)) return 'Pebble Round'
-  if (/\b(?:pebble\s+index|index\s*0?1|\bindex\b)\b/i.test(text))
-    return 'Pebble Index'
-  if (
-    /\b(?:switched|changed|selected)(?:\s+my)?\s+(?:to\s+)?(?:pebble\s+duo\s*2|pebble\s+time\s+duo\s*2|p2d|duo\s*2)\b/i.test(
-      text,
-    )
-  )
-    return 'Pebble Duo 2'
-  if (
-    /\b(?:pebble\s+duo\s*2|pebble\s+time\s+duo\s*2|p2d|duo\s*2)\b/i.test(text)
-  )
-    return 'Pebble Duo 2'
+  // cleanBodyText drops ">" and newlines, which arrows and the model line need.
+  const body = String(entry.body || '').replace(/[\\•\u2060*_~`#()[\]]/g, ' ')
+  const stated = switchedDevice(body) ?? modelLineDevice(body)
+  if (stated) return stated
+  for (const [device, pattern] of devicePatterns) {
+    if (new RegExp(String.raw`\b(?:${pattern})\b`, 'i').test(text))
+      return device
+  }
   if (entry.device && entry.device !== 'Unknown') {
     if (/time\s+2/i.test(entry.device)) return 'Pebble Time 2'
     if (/duo/i.test(entry.device)) return 'Pebble Duo 2'
