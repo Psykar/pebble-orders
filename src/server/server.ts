@@ -63,7 +63,7 @@ async function route(
         rsp = await routeAppInstall()
         break
       case Endpoint.OnRefreshTask:
-        await refreshReports()
+        await refreshReports('scheduled')
         rsp = {}
         break
       case Endpoint.OnValidateMegaThread:
@@ -84,17 +84,36 @@ async function routeGetReports(): Promise<ReportsRsp> {
   // after a moderator changes the mega thread setting fetches.
   const threadId = await getThreadId()
   const cached = await dbGetReports()
-  return cached?.threadId === threadId ? cached : await refreshReports(threadId)
+  return cached?.threadId === threadId
+    ? cached
+    : await refreshReports('view', threadId)
 }
 
-async function refreshReports(threadId?: `t3_${string}`): Promise<ReportsRsp> {
-  const reports = await fetchReports(threadId ?? (await getThreadId()))
-  await dbSetReports(reports)
-  return reports
+type RefreshTrigger = 'scheduled' | 'view' | 'menu' | 'install'
+
+async function refreshReports(
+  trigger: RefreshTrigger,
+  threadId?: `t3_${string}`,
+): Promise<ReportsRsp> {
+  const start = Date.now()
+  console.log(`refresh started (${trigger})`)
+  try {
+    const reports = await fetchReports(threadId ?? (await getThreadId()))
+    await dbSetReports(reports)
+    console.log(
+      `refresh finished (${trigger}) in ${Date.now() - start} ms: ${reports.entries.length} reports`,
+    )
+    return reports
+  } catch (err) {
+    console.log(
+      `refresh failed (${trigger}) after ${Date.now() - start} ms: ${err}`,
+    )
+    throw err
+  }
 }
 
 async function routeMenuRefresh(): Promise<UiResponse> {
-  const reports = await refreshReports()
+  const reports = await refreshReports('menu')
   return {
     showToast: {
       text: `Refreshed ${reports.entries.length} reports.`,
@@ -130,7 +149,7 @@ async function routeMenuNewPost(): Promise<UiResponse> {
 }
 
 async function routeAppInstall(): Promise<TriggerResponse> {
-  await refreshReports()
+  await refreshReports('install')
   await reddit.submitCustomPost({title: postTitle})
   return {}
 }
