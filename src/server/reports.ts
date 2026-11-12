@@ -8,6 +8,7 @@ import {
   type ReportStatus,
 } from '../shared/parser.js'
 import {dbGetKnownComments, dbSetKnownComments} from './db.ts'
+import {withRateLimitRetry} from './rateLimit.ts'
 
 /** Must match the `settings.subreddit` key in devvit.json. */
 export const megaThreadSetting = 'megaThread'
@@ -91,16 +92,17 @@ const recheckConcurrency = 5
 
 /** Fetches every top-level comment on the mega thread and parses them. */
 export async function fetchReports(threadId: T3): Promise<ReportsRsp> {
-  const post = await reddit.getPostById(threadId)
-  const scanned = await reddit
-    .getComments({
-      postId: threadId,
-      depth: 1,
-      limit: 10_000,
-      pageSize: scanPageSize,
-      sort: 'new',
-    })
-    .all()
+  const post = await withRateLimitRetry(() => reddit.getPostById(threadId))
+  const listing = reddit.getComments({
+    postId: threadId,
+    depth: 1,
+    limit: 10_000,
+    pageSize: scanPageSize,
+    sort: 'new',
+  })
+  // A retried all() resumes where the failed page stopped, except that a
+  // failed "load more" page loses its batch of IDs; rechecks recover those.
+  const scanned = await withRateLimitRetry(() => listing.all())
   const seen = new Set<string>(scanned.map(c => c.id))
   const missed = (await dbGetKnownComments(threadId))
     .filter(k => !seen.has(k.id))
@@ -153,7 +155,9 @@ async function recheckComments(
     for (let k = queue.shift(); k; k = queue.shift()) {
       let comment: ThreadComment
       try {
-        comment = await reddit.getCommentById(k.id as T1)
+        comment = await withRateLimitRetry(() =>
+          reddit.getCommentById(k.id as T1),
+        )
       } catch {
         failCheck(k)
         continue

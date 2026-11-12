@@ -14,6 +14,7 @@ import {
   type ReportsRsp,
 } from '../shared/api.ts'
 import {dbGetReports, dbSetReports} from './db.ts'
+import {withRateLimitRetry} from './rateLimit.ts'
 import {fetchReports, getThreadId, parseThreadId} from './reports.ts'
 
 const postTitle = 'Pebble Shipping Dashboard'
@@ -133,7 +134,7 @@ async function routeValidateMegaThread(
       error: 'Enter a Reddit post link (…/comments/abc123/…) or post ID.',
     }
   try {
-    await reddit.getPostById(threadId)
+    await withRateLimitRetry(() => reddit.getPostById(threadId))
   } catch {
     return {success: false, error: `Couldn't find post ${threadId}.`}
   }
