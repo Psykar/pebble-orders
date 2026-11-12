@@ -15,7 +15,7 @@ import {onReq} from './server.ts'
 
 let server: Server
 let serverURL: string
-let commentFetches = 0
+let threadFetches = 0
 let megaThread: string | undefined
 const missingPostId = 't3_missing'
 const redisValues = new Map<string, string>()
@@ -38,6 +38,7 @@ before(async () => {
     name === megaThreadSetting ? megaThread : undefined) as typeof settings.get
   reddit.getPostById = (async (id: string) => {
     if (id === missingPostId) throw Error('not found')
+    threadFetches++
     return {
       id,
       permalink: `/r/pebble/comments/${id.slice(3)}/thread/`,
@@ -47,12 +48,12 @@ before(async () => {
       numberOfComments: 2,
     }
   }) as unknown as typeof reddit.getPostById
-  reddit.getComments = (({postId}: {postId: string}) => {
-    commentFetches++
+  reddit.getComments = (({postId, sort}: {postId: string; sort?: string}) => {
     const threadId = postId
     return {
       all: async () => [
         {
+          id: 't1_abc123',
           authorName: 'test_user',
           body: reportBody,
           createdAt: new Date('2026-05-01T00:00:00Z'),
@@ -61,6 +62,7 @@ before(async () => {
           score: 1,
         },
         {
+          id: 't1_def456',
           authorName: 'chatty_user',
           body: 'Any news from the UK?',
           createdAt: new Date('2026-05-02T00:00:00Z'),
@@ -68,6 +70,20 @@ before(async () => {
           permalink: '/r/pebble/comments/1sjk3c7/_/def456/',
           score: 1,
         },
+        // Stands in for a comment one getComments pass drops.
+        ...(sort === 'old'
+          ? [
+              {
+                id: 't1_ghi789',
+                authorName: 'late_user',
+                body: reportBody,
+                createdAt: new Date('2026-05-03T00:00:00Z'),
+                parentId: threadId,
+                permalink: '/r/pebble/comments/1sjk3c7/_/ghi789/',
+                score: 0,
+              },
+            ]
+          : []),
       ],
     }
   }) as unknown as typeof reddit.getComments
@@ -104,11 +120,11 @@ after(async () => {
 
 beforeEach(() => {
   redisValues.clear()
-  commentFetches = 0
+  threadFetches = 0
   megaThread = undefined
 })
 
-test('get reports fetches once then serves the cache', async () => {
+test('get reports merges comment passes, fetches once, then serves the cache', async () => {
   const rsp = await fetch(`${serverURL}/${Endpoint.GetReports}`)
   assert.equal(rsp.status, 200)
   assert.equal(rsp.headers.get('Content-Type'), 'application/json')
@@ -121,11 +137,15 @@ test('get reports fetches once then serves the cache', async () => {
         'test_user',
         'https://www.reddit.com/r/pebble/comments/1sjk3c7/_/abc123/',
       ],
+      [
+        'late_user',
+        'https://www.reddit.com/r/pebble/comments/1sjk3c7/_/ghi789/',
+      ],
     ],
   )
 
   await fetch(`${serverURL}/${Endpoint.GetReports}`)
-  assert.equal(commentFetches, 1)
+  assert.equal(threadFetches, 1)
 })
 
 test('changing the mega thread setting refetches', async () => {
@@ -138,7 +158,7 @@ test('changing the mega thread setting refetches', async () => {
     reports.source,
     'https://www.reddit.com/r/pebble/comments/abc999/thread/',
   )
-  assert.equal(commentFetches, 2)
+  assert.equal(threadFetches, 2)
 })
 
 async function validate(value: string | undefined): Promise<unknown> {
@@ -167,7 +187,7 @@ test('refresh task updates the cache', async () => {
     method: 'POST',
   })
   assert.equal(rsp.status, 200)
-  assert.equal(commentFetches, 1)
+  assert.equal(threadFetches, 1)
   assert.ok(redisValues.size > 0)
 })
 

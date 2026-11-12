@@ -36,6 +36,7 @@ export async function getThreadId(): Promise<T3> {
 
 /** The subset of a Devvit Comment the parser needs. */
 export type ThreadComment = {
+  id: string
   authorName: string
   body: string
   createdAt: Date
@@ -62,13 +63,34 @@ const statusRank: {[status in ReportStatus]: number} = {
 }
 
 /** Fetches every top-level comment on the mega thread and parses them. */
+// One getComments pass can silently miss top-level comments: when expanding a
+// "load more" stub, @devvit/reddit 0.15.3 discards any nested "more" IDs that
+// Reddit returns. Passes in different orders miss different comments, so
+// merge two.
+const commentSorts = ['new', 'old'] as const
+
 export async function fetchReports(threadId: T3): Promise<ReportsRsp> {
   const post = await reddit.getPostById(threadId)
-  // getComments expands "load more" stubs itself, so this is the whole thread.
-  const comments = await reddit
-    .getComments({postId: threadId, depth: 1, limit: 10_000, pageSize: 100})
-    .all()
-  return buildReports(post, comments)
+  const passes = await Promise.all(
+    commentSorts.map(sort =>
+      reddit
+        .getComments({
+          postId: threadId,
+          depth: 1,
+          limit: 10_000,
+          pageSize: 100,
+          sort,
+        })
+        .all(),
+    ),
+  )
+  const comments = new Map<string, ThreadComment>()
+  for (const pass of passes) for (const c of pass) comments.set(c.id, c)
+  const counts = commentSorts.map((sort, i) => `${sort} ${passes[i]?.length}`)
+  console.log(
+    `${threadId} comments: ${counts.join(', ')}, merged ${comments.size}`,
+  )
+  return buildReports(post, [...comments.values()])
 }
 
 export function buildReports(

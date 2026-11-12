@@ -23,6 +23,7 @@ function comment(
   parentId: string = threadId,
 ): ThreadComment {
   return {
+    id: `t1_${authorName}${day}`,
     authorName,
     body,
     createdAt: new Date(Date.UTC(2026, 5, day)),
