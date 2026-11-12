@@ -93,16 +93,15 @@ const recheckConcurrency = 5
 /** Fetches every top-level comment on the mega thread and parses them. */
 export async function fetchReports(threadId: T3): Promise<ReportsRsp> {
   const post = await withRateLimitRetry(() => reddit.getPostById(threadId))
-  const listing = reddit.getComments({
-    postId: threadId,
-    depth: 1,
-    limit: 10_000,
-    pageSize: scanPageSize,
-    sort: 'new',
-  })
-  // A retried all() resumes where the failed page stopped, except that a
-  // failed "load more" page loses its batch of IDs; rechecks recover those.
-  const scanned = await withRateLimitRetry(() => listing.all())
+  // Two scans in opposite orders cross-check each other; they run one after
+  // the other because ~50 calls in parallel trips Reddit's burst rate limit.
+  const newFirst = await scanTopLevel(threadId, 'new')
+  const oldFirst = await scanTopLevel(threadId, 'old')
+  const merged = new Map<string, ThreadComment>()
+  for (const c of [...newFirst, ...oldFirst]) merged.set(c.id, c)
+  const scanned = [...merged.values()]
+  const newIds = new Set<string>(newFirst.map(c => c.id))
+  const inBoth = oldFirst.filter(c => newIds.has(c.id)).length
   const seen = new Set<string>(scanned.map(c => c.id))
   const missed = (await dbGetKnownComments(threadId))
     .filter(k => !seen.has(k.id))
@@ -117,7 +116,9 @@ export async function fetchReports(threadId: T3): Promise<ReportsRsp> {
   await dbSetKnownComments(threadId, known)
   // numberOfComments includes replies, so it bounds the top-level count.
   console.log(
-    `${threadId}: scan found ${scanned.length} top-level comments; ` +
+    `${threadId}: scans found new-first ${newFirst.length}, ` +
+      `old-first ${oldFirst.length}, in both ${inBoth}, ` +
+      `merged ${scanned.length} top-level comments; ` +
       `${missed.length} remembered reports missed, of which ` +
       `${recheck.found.length} still exist, ${recheck.gone.length} are gone, ` +
       `${recheck.unverified.length} unverified; ` +
@@ -130,6 +131,22 @@ export async function fetchReports(threadId: T3): Promise<ReportsRsp> {
         `unverified [${recheck.unverified.map(k => `${k.id}×${k.failedChecks}`).join(' ')}]`,
     )
   return buildReports(post, [...live, ...recheck.unverified.map(fromKnown)])
+}
+
+async function scanTopLevel(
+  threadId: T3,
+  sort: 'new' | 'old',
+): Promise<ThreadComment[]> {
+  const listing = reddit.getComments({
+    postId: threadId,
+    depth: 1,
+    limit: 10_000,
+    pageSize: scanPageSize,
+    sort,
+  })
+  // A retried all() resumes where the failed page stopped, except that a
+  // failed "load more" page loses its batch of IDs; rechecks recover those.
+  return await withRateLimitRetry(() => listing.all())
 }
 
 async function recheckComments(
