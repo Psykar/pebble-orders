@@ -48,7 +48,7 @@ before(async () => {
       numberOfComments: 2,
     }
   }) as unknown as typeof reddit.getPostById
-  reddit.getComments = (({postId, sort}: {postId: string; sort?: string}) => {
+  reddit.getComments = (({postId}: {postId: string}) => {
     const threadId = postId
     return {
       all: async () => [
@@ -70,20 +70,6 @@ before(async () => {
           permalink: '/r/pebble/comments/1sjk3c7/_/def456/',
           score: 1,
         },
-        // Stands in for a comment one getComments pass drops.
-        ...(sort === 'old'
-          ? [
-              {
-                id: 't1_ghi789',
-                authorName: 'late_user',
-                body: reportBody,
-                createdAt: new Date('2026-05-03T00:00:00Z'),
-                parentId: threadId,
-                permalink: '/r/pebble/comments/1sjk3c7/_/ghi789/',
-                score: 0,
-              },
-            ]
-          : []),
       ],
     }
   }) as unknown as typeof reddit.getComments
@@ -124,7 +110,7 @@ beforeEach(() => {
   megaThread = undefined
 })
 
-test('get reports merges comment passes, fetches once, then serves the cache', async () => {
+test('get reports fetches once then serves the cache', async () => {
   const rsp = await fetch(`${serverURL}/${Endpoint.GetReports}`)
   assert.equal(rsp.status, 200)
   assert.equal(rsp.headers.get('Content-Type'), 'application/json')
@@ -136,10 +122,6 @@ test('get reports merges comment passes, fetches once, then serves the cache', a
       [
         'test_user',
         'https://www.reddit.com/r/pebble/comments/1sjk3c7/_/abc123/',
-      ],
-      [
-        'late_user',
-        'https://www.reddit.com/r/pebble/comments/1sjk3c7/_/ghi789/',
       ],
     ],
   )

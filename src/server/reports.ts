@@ -63,11 +63,12 @@ const statusRank: {[status in ReportStatus]: number} = {
 }
 
 /** Fetches every top-level comment on the mega thread and parses them. */
-// One getComments pass can silently miss top-level comments: when expanding a
-// "load more" stub, @devvit/reddit 0.15.3 discards any nested "more" IDs that
-// Reddit returns. Passes in different orders miss different comments, so
-// merge two.
-const commentSorts = ['new', 'old'] as const
+// A getComments pass can silently miss top-level comments on a big thread: when
+// a "load more" batch overflows, @devvit/reddit 0.15.3 drops the leftover IDs
+// Reddit hands back. Batches of 100 lost ~30% here; ~50 loses far fewer. Extra
+// passes in other sort orders recover more but each costs ~25 API calls, and
+// two in parallel at 50 hit Reddit's rate limit.
+const commentSorts = ['new'] as const
 
 export async function fetchReports(threadId: T3): Promise<ReportsRsp> {
   const post = await reddit.getPostById(threadId)
@@ -78,7 +79,7 @@ export async function fetchReports(threadId: T3): Promise<ReportsRsp> {
           postId: threadId,
           depth: 1,
           limit: 10_000,
-          pageSize: 100,
+          pageSize: 50,
           sort,
         })
         .all(),
@@ -86,9 +87,12 @@ export async function fetchReports(threadId: T3): Promise<ReportsRsp> {
   )
   const comments = new Map<string, ThreadComment>()
   for (const pass of passes) for (const c of pass) comments.set(c.id, c)
-  const counts = commentSorts.map((sort, i) => `${sort} ${passes[i]?.length}`)
+  const passCounts = commentSorts.map(
+    (sort, i) => `${sort}-first ${passes[i]?.length}`,
+  )
+  // numberOfComments includes replies, so it bounds the top-level count.
   console.log(
-    `${threadId} comments: ${counts.join(', ')}, merged ${comments.size}`,
+    `${threadId} top-level comments: ${passCounts.join(', ')}, merged ${comments.size}; thread total incl. replies ${post.numberOfComments}`,
   )
   return buildReports(post, [...comments.values()])
 }
