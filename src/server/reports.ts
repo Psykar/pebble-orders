@@ -117,24 +117,34 @@ export async function fetchReports(threadId: T3): Promise<ReportsRsp> {
   console.log(
     `${threadId}: scan found ${scanned.length} top-level comments; ` +
       `${missed.length} remembered reports missed, of which ` +
-      `${recheck.found.length} still exist, ${recheck.gone} are gone, ` +
+      `${recheck.found.length} still exist, ${recheck.gone.length} are gone, ` +
       `${recheck.unverified.length} unverified; ` +
       `thread total incl. replies ${post.numberOfComments}`,
   )
+  if (missed.length)
+    console.log(
+      `${threadId} rechecks: still exist [${recheck.found.map(c => c.id).join(' ')}]; ` +
+        `gone [${recheck.gone.join(' ')}]; ` +
+        `unverified [${recheck.unverified.map(k => `${k.id}×${k.failedChecks}`).join(' ')}]`,
+    )
   return buildReports(post, [...live, ...recheck.unverified.map(fromKnown)])
 }
 
 async function recheckComments(
   postId: T3,
   missed: readonly KnownComment[],
-): Promise<{found: ThreadComment[]; gone: number; unverified: KnownComment[]}> {
+): Promise<{
+  found: ThreadComment[]
+  gone: string[]
+  unverified: KnownComment[]
+}> {
   const found: ThreadComment[] = []
   const unverified: KnownComment[] = []
-  let gone = 0
+  const gone: string[] = []
   const failCheck = (k: KnownComment): void => {
     if (k.failedChecks + 1 < maxFailedChecks)
       unverified.push({...k, failedChecks: k.failedChecks + 1})
-    else gone++
+    else gone.push(k.id)
   }
 
   const queue = missed.slice(0, maxRechecks)
@@ -149,7 +159,7 @@ async function recheckComments(
         continue
       }
       if (toEntry(postId, comment)) found.push(comment)
-      else gone++
+      else gone.push(k.id)
     }
   }
   await Promise.all(Array.from({length: recheckConcurrency}, worker))
