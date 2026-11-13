@@ -7,7 +7,7 @@ import {
   normalizeEntry,
   type ReportStatus,
 } from '../shared/parser.js'
-import {dbGetKnownComments, dbSetKnownComments} from './db.ts'
+import {dbGetKnownComments, dbNextScanRound, dbSetKnownComments} from './db.ts'
 import {withRateLimitRetry} from './rateLimit.ts'
 
 /** Must match the `settings.subreddit` key in devvit.json. */
@@ -89,19 +89,24 @@ const maxFailedChecks = 4
 // Comments over the cap count as a failed check and go first next time.
 const maxRechecks = 150
 const recheckConcurrency = 5
+// Each sort misses a different handful of comments, so refreshes rotate
+// through them and rechecks carry what one scan misses. A single scan takes
+// ~12 s; two in one refresh come close to Devvit's 30 s request limit.
+export const scanSorts = [
+  'new',
+  'old',
+  'top',
+  'controversial',
+  'confidence',
+] as const
+type ScanSort = (typeof scanSorts)[number]
 
 /** Fetches every top-level comment on the mega thread and parses them. */
 export async function fetchReports(threadId: T3): Promise<ReportsRsp> {
   const post = await withRateLimitRetry(() => reddit.getPostById(threadId))
-  // Two scans in opposite orders cross-check each other; they run one after
-  // the other because ~50 calls in parallel trips Reddit's burst rate limit.
-  const newFirst = await scanTopLevel(threadId, 'new')
-  const oldFirst = await scanTopLevel(threadId, 'old')
-  const merged = new Map<string, ThreadComment>()
-  for (const c of [...newFirst, ...oldFirst]) merged.set(c.id, c)
-  const scanned = [...merged.values()]
-  const newIds = new Set<string>(newFirst.map(c => c.id))
-  const inBoth = oldFirst.filter(c => newIds.has(c.id)).length
+  const sort =
+    scanSorts[(await dbNextScanRound(threadId)) % scanSorts.length] ?? 'new'
+  const scanned = await scanTopLevel(threadId, sort)
   const seen = new Set<string>(scanned.map(c => c.id))
   const missed = (await dbGetKnownComments(threadId))
     .filter(k => !seen.has(k.id))
@@ -116,9 +121,7 @@ export async function fetchReports(threadId: T3): Promise<ReportsRsp> {
   await dbSetKnownComments(threadId, known)
   // numberOfComments includes replies, so it bounds the top-level count.
   console.log(
-    `${threadId}: scans found new-first ${newFirst.length}, ` +
-      `old-first ${oldFirst.length}, in both ${inBoth}, ` +
-      `merged ${scanned.length} top-level comments; ` +
+    `${threadId}: ${sort} scan found ${scanned.length} top-level comments; ` +
       `${missed.length} remembered reports missed, of which ` +
       `${recheck.found.length} still exist, ${recheck.gone.length} are gone, ` +
       `${recheck.unverified.length} unverified; ` +
@@ -146,7 +149,7 @@ export async function fetchReports(threadId: T3): Promise<ReportsRsp> {
 
 async function scanTopLevel(
   threadId: T3,
-  sort: 'new' | 'old',
+  sort: ScanSort,
 ): Promise<ThreadComment[]> {
   const listing = reddit.getComments({
     postId: threadId,

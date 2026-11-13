@@ -10,7 +10,7 @@ import {
   settings,
 } from '@devvit/web/server'
 import {Endpoint, type ErrorRsp, type ReportsRsp} from '../shared/api.ts'
-import {megaThreadSetting} from './reports.ts'
+import {megaThreadSetting, scanSorts} from './reports.ts'
 import {onReq} from './server.ts'
 
 let server: Server
@@ -53,6 +53,7 @@ let scanSkips = new Set<string>()
 /** What getCommentById returns; a missing ID throws. */
 let commentsById = new Map<string, ReturnType<typeof threadComments>[number]>()
 let commentByIdCalls = 0
+let scanSortsUsed: string[] = []
 
 before(async () => {
   redis.get = async key => redisValues.get(key)
@@ -74,9 +75,12 @@ before(async () => {
       numberOfComments: 2,
     }
   }) as unknown as typeof reddit.getPostById
-  reddit.getComments = (({postId}: {postId: string}) => ({
-    all: async () => threadComments(postId).filter(c => !scanSkips.has(c.id)),
-  })) as unknown as typeof reddit.getComments
+  reddit.getComments = (({postId, sort}: {postId: string; sort: string}) => {
+    scanSortsUsed.push(sort)
+    return {
+      all: async () => threadComments(postId).filter(c => !scanSkips.has(c.id)),
+    }
+  }) as unknown as typeof reddit.getComments
   reddit.getCommentById = (async (id: string) => {
     commentByIdCalls++
     const comment = commentsById.get(id)
@@ -122,6 +126,7 @@ beforeEach(() => {
   scanSkips = new Set()
   commentsById = new Map()
   commentByIdCalls = 0
+  scanSortsUsed = []
 })
 
 async function refresh(): Promise<ReportsRsp> {
@@ -137,6 +142,11 @@ async function refresh(): Promise<ReportsRsp> {
 
 const authors = (reports: ReportsRsp): string[] =>
   reports.entries.map(entry => entry.author)
+
+test('each refresh scans in the next sort order', async () => {
+  for (let i = 0; i <= scanSorts.length; i++) await refresh()
+  assert.deepEqual(scanSortsUsed, [...scanSorts, scanSorts[0]])
+})
 
 test('a report the scan misses is kept while a recheck finds it', async () => {
   await refresh()

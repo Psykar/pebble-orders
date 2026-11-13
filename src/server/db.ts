@@ -41,3 +41,14 @@ export async function dbSetKnownComments(
     expiration: new Date(Date.now() + reportsTtlMs),
   })
 }
+
+function scanRoundKey(threadId: string): string {
+  return `scan-round:v1:${threadId}`
+}
+
+/** Counts refreshes per thread so each one can scan in a different order. */
+export async function dbNextScanRound(threadId: string): Promise<number> {
+  const round = Number((await redis.get(scanRoundKey(threadId))) ?? 0) || 0
+  await redis.set(scanRoundKey(threadId), String(round + 1))
+  return round
+}
