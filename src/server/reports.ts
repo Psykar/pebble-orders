@@ -140,10 +140,6 @@ export async function fetchReports(threadId: T3): Promise<ReportsRsp> {
     `${threadId} not reports: ${scanned.filter(isGone).length} deleted or removed; ` +
       `${notReports.length} unparsed [${notReports.map(c => c.id).join(' ')}]`,
   )
-  for (const c of notReports)
-    console.log(
-      `unparsed ${c.id}: ${c.body.slice(0, 300).replace(/\s*\n\s*/g, ' ⏎ ')}`,
-    )
   return buildReports(post, [...live, ...recheck.unverified.map(fromKnown)])
 }
 
